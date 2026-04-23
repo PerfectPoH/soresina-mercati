@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { safeLogError } from '@/lib/log'
 import Link from 'next/link'
+import EventCardImage from '@/components/EventCardImage'
 
 // La lista degli eventi cambia quando l'admin ne crea di nuovi o ne disattiva.
 // Forza il rendering dinamico e disabilita la cache, altrimenti i visitatori
@@ -58,32 +59,12 @@ export default async function HomePage() {
               href={`/evento/${event.id}`}
               className="group bg-white rounded-xl border border-stone-200 hover:border-amber-400 hover:shadow-warm-lg transition-all no-underline overflow-hidden flex flex-col"
             >
-              {/* Hero image (opzionale). Se l'immagine non carica
-                  o non e' presente, mostriamo un placeholder crema+ambra
-                  cosi' tutte le card restano visivamente omogenee. */}
-              {event.image_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={event.image_url}
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                  className="w-full h-36 object-cover bg-cream-100"
-                  onError={(e) => { e.currentTarget.style.display = 'none' }}
-                />
-              ) : (
-                <div
-                  className="w-full h-36 flex items-center justify-center"
-                  style={{ background: 'linear-gradient(135deg, #FAEEDA 0%, #FAC775 100%)' }}
-                  aria-hidden="true"
-                >
-                  <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-                    <path d="M9 23 L24 11 L39 23 L39 26 L9 26 Z" fill="#BA7517" opacity="0.7"/>
-                    <rect x="13" y="30" width="8" height="9" rx="1.5" fill="#BA7517" opacity="0.6"/>
-                    <rect x="27" y="30" width="8" height="9" rx="1.5" fill="#BA7517" opacity="0.6"/>
-                  </svg>
-                </div>
-              )}
+              {/* Hero image (opzionale). Se l'URL e' rotto o assente,
+                  il componente mostra il placeholder gradient ambra col
+                  disegno della bancarella. Client component: serve stato
+                  per il fallback onError (i server components non possono
+                  passare funzioni come prop). */}
+              <EventCardImage src={event.image_url} />
 
               <div className="p-5 flex flex-col flex-1">
                 <div className="flex items-start justify-between mb-3">
