@@ -5,63 +5,74 @@ Pensato per chi gestisce il sito senza essere sviluppatore.
 
 ---
 
-## 1. Backup automatico del database (Supabase)
+## 1. Backup del database (Supabase)
 
-### Cosa succede di default (piano free)
+### Importante: il piano free NON ha backup automatici
 
-Supabase sul piano gratuito esegue **un backup automatico al giorno**
-degli ultimi 7 giorni. Non serve configurare nulla per averlo attivo:
-e' acceso out-of-the-box. Il restore e' manuale e si richiede via
-Dashboard.
+Sul piano gratuito Supabase **non** include backup automatici
+giornalieri con restore one-click. Quelli sono una feature del
+piano Pro ($25/mese), che include 7 giorni di Point-In-Time
+Recovery.
 
-### Come verificare che i backup esistano
+Per un mercato cittadino con volumi bassi, il Pro e' eccessivo.
+La soluzione e' un **dump manuale periodico** che scarichi tu e
+conservi in un posto sicuro.
 
-1. Vai su [Supabase Dashboard](https://supabase.com/dashboard).
-2. Apri il progetto `soresina-mercati` (o come lo hai chiamato).
-3. Menu laterale: **Database** → **Backups**.
-4. Dovresti vedere una riga per ogni giorno degli ultimi 7 giorni,
-   ciascuna con dimensione e timestamp.
+### Piano raccomandato per il free tier
 
-Se la pagina dice "No backups" o "Upgrade to enable", significa che
-qualcosa non e' allineato con il piano: apri un ticket a Supabase.
+Scarica un dump **ogni settimana** (o almeno ogni mese) e tienilo
+in un cloud che non sia Supabase (Google Drive, Dropbox, disco
+esterno). Conserva gli ultimi 6 mesi di dump in rotazione.
 
-### Come ripristinare (worst case)
+### Come fare un dump manuale
 
-Non serve farlo mai in condizioni normali. In caso di disastro
-(dati cancellati per errore, SQL andato male, compromissione):
+**Opzione A — da terminale con `pg_dump`** (consigliata):
 
-1. Supabase Dashboard → **Database** → **Backups**.
-2. Scegli il backup giornaliero piu' vicino al momento pre-disastro.
-3. Clicca **Restore**. Supabase scrive sopra lo stato attuale.
-   **Attenzione**: tutte le modifiche dopo quel backup vengono perse.
-
-Per recuperi piu' granulari (point-in-time) serve il piano Pro.
-Per il nostro volume di traffico (piccolo mercato cittadino) il
-giornaliero e' piu' che sufficiente.
-
-### Backup manuale mensile (raccomandato)
-
-Una volta al mese e' buona pratica scaricare un dump locale. Cosi'
-hai una copia indipendente anche in caso di problemi seri col
-fornitore.
-
-**Modo semplice — da Dashboard**:
-
-1. Supabase Dashboard → **Database** → **Backups**.
-2. Ogni riga ha un bottone "Download" o "Restore" di fianco.
-3. Click su "Download", salva il `.sql` in una cartella (es.
-   `backups/` sul tuo computer).
-
-**Modo tecnico — da terminale** (opzionale):
+1. Vai su Supabase Dashboard → **Project Settings** → **Database**.
+2. In "Connection string" copia la stringa **Transaction pooler**
+   (porta 6543) o **Direct connection** (porta 5432). Scegli
+   "URI" come formato.
+3. Sostituisci `[YOUR-PASSWORD]` con la password del DB.
+4. Installa `pg_dump` se non ce l'hai:
+   - Windows: scarica PostgreSQL da postgresql.org (basta scegliere
+     "Command Line Tools" durante l'installazione).
+   - Mac: `brew install postgresql`
+   - Linux: `sudo apt install postgresql-client`
+5. Lancia:
 
 ```bash
-# Ottieni il Database URL da Supabase Dashboard > Project Settings > Database
 pg_dump "postgres://postgres.<ref>:<password>@<host>:5432/postgres" \
   --schema=public --no-owner --no-privileges \
   -f backup-$(date +%Y%m%d).sql
 ```
 
-Conserva i dump degli ultimi 6 mesi su Google Drive o simile.
+Ti crea un file `backup-20260423.sql` (o simile) con tutto lo
+schema e i dati pubblici. Salvalo fuori da Supabase.
+
+**Opzione B — export CSV per tabella** (piu' semplice, meno
+completo):
+
+1. Supabase Dashboard → **Table Editor**.
+2. Per ogni tabella importante (`events`, `stalls`, `bookings`,
+   `vendors`) click sui tre puntini accanto al nome → "Export data
+   as CSV".
+3. Scarica e archivia tutti i CSV insieme.
+
+L'opzione B ti salva i dati ma **non** lo schema ne' le policy
+RLS ne' i trigger. Se devi ricostruire da zero il progetto, il
+`pg_dump` ti salva tutto; i CSV solo i dati.
+
+### Se vuoi Point-In-Time Recovery
+
+Se un giorno il sito cresce e un disastro di 24h fa diventa
+inaccettabile, valuta l'upgrade al **piano Pro** ($25/mese):
+
+- PITR fino a 7 giorni indietro (default) o 14/28 con add-on.
+- Restore cliccando su un punto temporale dal Dashboard.
+- Backup logici giornalieri conservati per 7 giorni.
+
+Fino ad allora, il dump manuale settimanale e' l'alternativa che
+costa zero.
 
 ---
 
