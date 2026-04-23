@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { enforceRateLimit } from '@/lib/rate-limit'
 import { safeLogError } from '@/lib/log'
 import { validateUuid } from '@/lib/validate'
@@ -38,6 +39,14 @@ export async function DELETE(request, { params }) {
       )
     }
 
+    // Leggo l'event_id PRIMA dell'update cosi' posso revalidare la pagina
+    // dell'evento giusto (per mostrare subito il posteggio come libero)
+    const { data: existing } = await supabase
+      .from('bookings')
+      .select('event_id')
+      .eq('id', params.id)
+      .maybeSingle()
+
     const { error } = await supabase
       .from('bookings')
       .update({ status: 'cancelled' })
@@ -49,6 +58,13 @@ export async function DELETE(request, { params }) {
         { status: 400 }
       )
     }
+
+    // Invalida la cache lato client per mappa + profilo + admin
+    try {
+      if (existing?.event_id) revalidatePath(`/evento/${existing.event_id}`)
+      revalidatePath('/profilo')
+      revalidatePath('/admin')
+    } catch (_) {}
 
     return NextResponse.json({ success: true })
   } catch (err) {

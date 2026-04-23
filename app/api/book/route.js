@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { enforceRateLimit } from '@/lib/rate-limit'
 import { safeLogError } from '@/lib/log'
 import {
@@ -92,6 +93,21 @@ export async function POST(request) {
         { error: error.code || 'insert_failed', message: error.message },
         { status: 400 }
       )
+    }
+
+    // Invalida la client router cache di Next.js per le pagine che mostrano
+    // questa prenotazione. Senza questo, navigando via e tornando indietro
+    // (es. da /prenotato/:id torno a /evento/:id) il browser mostra ancora
+    // il posteggio come "libero" fino ad un hard refresh.
+    // Su mobile questo si nota di piu' perche' il websocket di Realtime
+    // viene messo in pausa dal browser quando la scheda non e' in foreground.
+    try {
+      revalidatePath(`/evento/${event_id}`)
+      revalidatePath('/profilo')
+      revalidatePath('/admin')
+    } catch (_) {
+      // revalidatePath puo' fallire in edge cases (build time, preview);
+      // non e' fatale per la prenotazione appena creata.
     }
 
     return NextResponse.json({ data })

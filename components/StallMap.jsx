@@ -94,6 +94,26 @@ export default function StallMap({ stalls, event, currentUser, currentVendor }) 
     return () => clearTimeout(t)
   }, [liveUpdate])
 
+  // Rete di sicurezza per mobile: quando l'utente torna sulla pagina
+  // (back button, switch tra app, schermo che si riaccende), il browser
+  // su telefono mette in pausa il websocket di Realtime e si perdono
+  // gli eventi. Il "visibilitychange" + "focus" ci permettono di forzare
+  // un refresh dei dati ogni volta che la scheda torna attiva.
+  useEffect(() => {
+    function refreshOnVisible() {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        router.refresh()
+      }
+    }
+    window.addEventListener('focus', refreshOnVisible)
+    document.addEventListener('visibilitychange', refreshOnVisible)
+    return () => {
+      window.removeEventListener('focus', refreshOnVisible)
+      document.removeEventListener('visibilitychange', refreshOnVisible)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Su mobile, quando l'utente seleziona un posteggio, scorri fino al pannello
   // di prenotazione (che e' sotto la mappa nel layout stacked). Senza questo,
   // il cambio di stato puo' sembrare "non avere fatto nulla" su telefoni.
