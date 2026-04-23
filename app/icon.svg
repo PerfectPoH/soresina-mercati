@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#BA7517"/>
+  <!-- Tenda da mercato stilizzata -->
+  <path d="M10 24 L32 10 L54 24 L54 28 L10 28 Z" fill="#FAEEDA"/>
+  <rect x="14" y="28" width="36" height="26" fill="#FAC775"/>
+  <rect x="14" y="32" width="6" height="4" fill="#BA7517"/>
+  <rect x="23" y="32" width="6" height="4" fill="#BA7517"/>
+  <rect x="32" y="32" width="6" height="4" fill="#BA7517"/>
+  <rect x="41" y="32" width="6" height="4" fill="#BA7517"/>
+  <rect x="14" y="40" width="6" height="4" fill="#BA7517"/>
+  <rect x="23" y="40" width="6" height="4" fill="#BA7517"/>
+  <rect x="32" y="40" width="6" height="4" fill="#BA7517"/>
+  <rect x="41" y="40" width="6" height="4" fill="#BA7517"/>
+</svg>

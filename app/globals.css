@@ -1,0 +1,180 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --amber-brand: #BA7517;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: #FAFAF8;
+  color: #1a1a18;
+}
+
+/* Skip link: accessibilita' tastiera (WCAG 2.4.1 Bypass Blocks).
+   Nascosto fuori schermo per default, visibile solo quando riceve focus
+   (utenti che navigano con Tab). */
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -3rem;
+  z-index: 100;
+  padding: 0.5rem 1rem;
+  background: #BA7517;
+  color: white;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: top 150ms ease;
+}
+
+.skip-link:focus {
+  top: 1rem;
+  outline: 2px solid #5B3A08;
+  outline-offset: 2px;
+}
+
+/* Focus visibile di default su elementi interattivi.
+   Tailwind nasconde l'outline di default; questa regola lo ripristina
+   solo quando l'utente sta usando la tastiera (focus-visible). */
+:focus-visible {
+  outline: 2px solid #BA7517;
+  outline-offset: 2px;
+}
+
+/* Rispetta le preferenze utente per "reduced motion".
+   Le transizioni/animazioni piu' vistose (ping, scale, spinner spin) sono
+   sostituite con versioni statiche. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration:       0.01ms !important;
+    animation-iteration-count: 1      !important;
+    transition-duration:      0.01ms !important;
+    scroll-behavior:          auto   !important;
+  }
+}
+
+/* ================================================================
+   Dark mode (tema scuro, attivato tramite classe `dark` su <html>)
+   Strategia: invece di aggiungere `dark:` su ogni singolo elemento
+   in decine di componenti, mappiamo qui le classi Tailwind piu'
+   ricorrenti del design a controparti scure tramite regole CSS.
+   Scope: pagine di uso "cittadino". Non tocca le stampe / admin
+   tabelle dove il tema chiaro e' preferibile.
+   ================================================================ */
+
+/* Base: sfondo e testo */
+html.dark body {
+  background: #1a1918;
+  color:      #e7e5e2;
+}
+
+/* Skip link resta ben visibile in dark */
+html.dark .skip-link:focus {
+  outline-color: #FAC775;
+}
+
+html.dark :focus-visible {
+  outline-color: #FAC775;
+}
+
+/* Superfici bianche -> grigio scuro */
+html.dark .bg-white {
+  background-color: #262422 !important;
+}
+html.dark .bg-stone-50 {
+  background-color: #1f1d1b !important;
+}
+html.dark .bg-stone-100 {
+  background-color: #2a2826 !important;
+}
+
+/* Bordi */
+html.dark .border-stone-100,
+html.dark .border-stone-200,
+html.dark .border-stone-300 {
+  border-color: #3a3734 !important;
+}
+
+/* Divisori */
+html.dark .divide-stone-100 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-stone-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #3a3734 !important;
+}
+
+/* Testo principale */
+html.dark .text-stone-900 { color: #f5f4f2 !important; }
+html.dark .text-stone-800 { color: #e7e5e2 !important; }
+html.dark .text-stone-700 { color: #d6d3cf !important; }
+html.dark .text-stone-600 { color: #b8b4af !important; }
+html.dark .text-stone-500 { color: #9a9690 !important; }
+html.dark .text-stone-400 { color: #7a7670 !important; }
+html.dark .text-stone-300 { color: #5a5650 !important; }
+
+/* Hover sui link grigi */
+html.dark .hover\:bg-stone-50:hover { background-color: #2d2b29 !important; }
+html.dark .hover\:text-stone-600:hover { color: #d6d3cf !important; }
+html.dark .hover\:text-stone-900:hover { color: #f5f4f2 !important; }
+
+/* Stati colorati vengono attenuati su sfondo scuro per ridurre il
+   "neon" che risulta troppo vivace. Contrast pass-through ai colori
+   piu' desaturati. */
+html.dark .bg-green-50 { background-color: #122219 !important; }
+html.dark .bg-green-100 { background-color: #16311f !important; }
+html.dark .border-green-200 { border-color: #1f4a2e !important; }
+html.dark .border-green-400 { border-color: #2f6b3f !important; }
+html.dark .border-green-500 { border-color: #3a8150 !important; }
+html.dark .text-green-600 { color: #6bd991 !important; }
+html.dark .text-green-700 { color: #7ce0a1 !important; }
+html.dark .text-green-800 { color: #9ae9b8 !important; }
+html.dark .text-green-900 { color: #bcf0cf !important; }
+
+html.dark .bg-red-50 { background-color: #2a1212 !important; }
+html.dark .bg-red-100 { background-color: #3a1818 !important; }
+html.dark .bg-red-200 { background-color: #4a1f1f !important; }
+html.dark .border-red-200 { border-color: #5a2626 !important; }
+html.dark .border-red-400 { border-color: #803838 !important; }
+html.dark .text-red-600 { color: #f99191 !important; }
+html.dark .text-red-700 { color: #fca5a5 !important; }
+html.dark .text-red-800 { color: #fcbcbc !important; }
+html.dark .text-red-900 { color: #fcd1d1 !important; }
+
+html.dark .bg-amber-50 { background-color: #2a2212 !important; }
+html.dark .border-amber-200 { border-color: #6a4e1a !important; }
+html.dark .text-amber-700 { color: #FAC775 !important; }
+html.dark .text-amber-800 { color: #FAE0B0 !important; }
+html.dark .text-amber-900 { color: #FAEEDA !important; }
+
+/* Input */
+html.dark input[type="text"],
+html.dark input[type="email"],
+html.dark input[type="password"],
+html.dark input[type="tel"],
+html.dark input[type="search"],
+html.dark textarea,
+html.dark select {
+  background-color: #1f1d1b;
+  color:            #e7e5e2;
+  border-color:     #3a3734;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #7a7670;
+}
+
+/* Header sticky e banner: blur/opacita' su scuro */
+html.dark header.bg-white { background-color: #1f1d1ee6 !important; }
+
+/* Print: forza sempre il tema chiaro per risparmiare toner */
+@media print {
+  html.dark body { background: white !important; color: black !important; }
+  html.dark * { color: black !important; }
+}

@@ -1,0 +1,57 @@
+# .gitignore - file da NON caricare su GitHub.
+# Ogni riga e' un pattern: se un file ci corrisponde, Git lo ignora.
+
+# ---------- Dipendenze ----------
+# node_modules e' la cartella con tutte le librerie: enorme (centinaia di MB)
+# e si ricostruisce con `npm install`, quindi non va versionata.
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# ---------- Build di Next.js ----------
+# Generati automaticamente ad ogni build. Vercel li rigenera da solo.
+/.next/
+/out/
+/build
+/dist
+
+# ---------- Test/coverage ----------
+/coverage
+
+# ---------- Variabili d'ambiente (CRITICO) ----------
+# Contengono chiavi segrete come SUPABASE_SERVICE_ROLE_KEY.
+# Vanno configurate su Vercel, MAI su GitHub.
+.env
+.env*.local
+.env.development
+.env.production
+
+# Il file .example (senza chiavi vere, solo i nomi) si puo' committare:
+!.env.local.example
+!.env.example
+
+# ---------- Log ----------
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ---------- Editor / sistema ----------
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ---------- Vercel ----------
+.vercel
+
+# ---------- TypeScript ----------
+*.tsbuildinfo
+next-env.d.ts
