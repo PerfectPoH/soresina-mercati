@@ -88,13 +88,17 @@ export default function RegistratiPage() {
     // Dopo la verifica email useremo questi campi per popolare la tabella
     // `vendors` dalla pagina /accedi (o al primo accesso autenticato).
     let signUpError
+    // emailRedirectTo -> /auth/callback: la route scambia il code PKCE
+    // per una sessione vera, poi redirige a /accedi che porta al profilo
+    // giusto in base al ruolo. Senza questo passaggio il link dell'email
+    // atterra su una pagina senza sessione attiva.
     if (mode === 'password') {
       const { error } = await supabase.auth.signUp({
         email:    form.email.trim(),
         password: form.password,
         options: {
           data: profile,
-          emailRedirectTo: `${window.location.origin}/accedi`,
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       })
       signUpError = error
@@ -103,7 +107,7 @@ export default function RegistratiPage() {
         email: form.email.trim(),
         options: {
           data: profile,
-          emailRedirectTo: `${window.location.origin}/accedi`,
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       })
       signUpError = error

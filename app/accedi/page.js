@@ -4,6 +4,11 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { createSupabaseBrowserClient } from '@/lib/supabase-browser'
 
+// Messaggi di errore che possono arrivare dal callback OAuth/magic link.
+const ERROR_MESSAGES = {
+  auth_callback_failed: 'Il link e\u2019 scaduto o gia\u2019 usato. Richiedine uno nuovo.',
+}
+
 export default function AccediPage() {
   const [mode, setMode]         = useState('password')  // 'password' | 'magic'
   const [email, setEmail]       = useState('')
@@ -12,6 +17,17 @@ export default function AccediPage() {
   const [error, setError]       = useState(null)
   const [magicSent, setMagicSent] = useState(false)
   const [bootstrapping, setBootstrapping] = useState(true)
+
+  // Se /auth/callback ha fallito, ci reindirizza qui con ?error=...
+  // Leggiamo il parametro e mostriamo un messaggio utile all'utente.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const err = params.get('error')
+    if (err && ERROR_MESSAGES[err]) {
+      setError(ERROR_MESSAGES[err])
+    }
+  }, [])
 
   // Al primo caricamento: se l'utente e' gia' loggato (es. appena tornato
   // dal magic link via email), sincronizza il profilo e redirigi.
@@ -76,10 +92,13 @@ export default function AccediPage() {
         // Se torna, significa che c'e' stato un errore: sblocca l'UI.
         await redirectByRole(supabase)
       } else {
-        // Magic link: manda email con link
+        // Magic link: manda email con link.
+        // Il link punta a /auth/callback, che scambia il `code` PKCE per
+        // una sessione vera (cookie httpOnly) e poi redirige a /accedi,
+        // che a sua volta manda l'utente su / o /admin in base al ruolo.
         const { error: otpError } = await supabase.auth.signInWithOtp({
           email: email.trim(),
-          options: { emailRedirectTo: `${window.location.origin}/accedi` },
+          options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
         })
         if (otpError) {
           setError(otpError.message || 'Errore nell\u2019invio del link. Riprova.')
