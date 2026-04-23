@@ -62,14 +62,17 @@ export const metadata = {
       'max-image-preview': 'large',
     },
   },
-  // I colori UI di Safari iOS e Chrome Android
+}
+
+// Next.js 14.2+ richiede che `themeColor` e `viewport` siano esportati
+// separatamente da `metadata` (altrimenti emette warning in build e
+// Lighthouse vede il tag viewport mancante).
+export const viewport = {
+  // Colore della barra UI di Safari iOS e Chrome Android.
   themeColor: '#BA7517',
-  // Indica a iOS Safari che la pagina e' pensata per dispositivi mobili
-  viewport: {
-    width:       'device-width',
-    initialScale: 1,
-    maximumScale: 5,
-  },
+  width:        'device-width',
+  initialScale: 1,
+  maximumScale: 5,
 }
 
 // Script inline anti-FOUC per il tema scuro.

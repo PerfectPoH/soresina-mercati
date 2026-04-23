@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { enforceRateLimit } from '@/lib/rate-limit'
 import { safeLogError } from '@/lib/log'
 import { validateUuid, validateString } from '@/lib/validate'
@@ -62,7 +63,7 @@ export async function PATCH(request, { params }) {
     // JSON object" e non si capisce cosa sia successo.
     const { data: existing, error: findError } = await supabase
       .from('stalls')
-      .select('id')
+      .select('id, event_id')
       .eq('id', params.id)
       .maybeSingle()
 
@@ -106,6 +107,19 @@ export async function PATCH(request, { params }) {
         { status: 403 }
       )
     }
+
+    // Invalida la cache della mappa evento e della dashboard admin.
+    // Senza questo, l'admin che torna sulla pagina evento con il
+    // browser back button o via <Link> vedrebbe il posteggio ancora
+    // nello stato precedente (verde invece di rosso o viceversa).
+    try {
+      if (existing.event_id) revalidatePath(`/evento/${existing.event_id}`)
+      revalidatePath('/admin')
+    } catch (_) {
+      // revalidatePath puo' fallire in edge cases (build time / preview);
+      // non e' fatale: l'update e' gia' andato a buon fine.
+    }
+
     return NextResponse.json({ data: data[0] })
   } catch (err) {
     safeLogError('[api/stalls PATCH] unexpected error', err)

@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { enforceRateLimit } from '@/lib/rate-limit'
 import { safeLogError } from '@/lib/log'
 import {
@@ -94,6 +95,12 @@ export async function POST(request) {
         { status: 207 }
       )
     }
+
+    // Nuovo evento visibile in home + dashboard admin.
+    try {
+      revalidatePath('/')
+      revalidatePath('/admin')
+    } catch (_) {}
 
     return NextResponse.json({ data: event })
   } catch (err) {

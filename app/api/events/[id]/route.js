@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { enforceRateLimit } from '@/lib/rate-limit'
 import { safeLogError } from '@/lib/log'
 import {
@@ -37,6 +38,11 @@ export async function DELETE(request, { params }) {
     if (error) {
       return NextResponse.json({ error: error.code || 'delete_failed', message: error.message }, { status: 400 })
     }
+    try {
+      revalidatePath('/')
+      revalidatePath('/admin')
+      revalidatePath(`/evento/${params.id}`)
+    } catch (_) {}
     return NextResponse.json({ success: true })
   } catch (err) {
     safeLogError('[api/events DELETE] unexpected error', err)
@@ -102,6 +108,13 @@ export async function PATCH(request, { params }) {
     if (error) {
       return NextResponse.json({ error: error.code || 'update_failed', message: error.message }, { status: 400 })
     }
+    // Edit o archiviazione evento: invalida home (lista mercati attivi),
+    // dashboard admin (lista con filtri), e la pagina evento stessa.
+    try {
+      revalidatePath('/')
+      revalidatePath('/admin')
+      revalidatePath(`/evento/${params.id}`)
+    } catch (_) {}
     return NextResponse.json({ data })
   } catch (err) {
     safeLogError('[api/events PATCH] unexpected error', err)
