@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { safeLogError } from '@/lib/log'
 import StallMap from '@/components/StallMap'
 import WaitlistWidget from '@/components/WaitlistWidget'
+import EventMap from '@/components/EventMap'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 
@@ -162,8 +163,12 @@ export default async function EventoPage({ params }) {
         </div>
       )}
 
-      {/* Mappa interattiva */}
+      {/* Mappa interattiva dei posteggi */}
       <StallMap stalls={stalls} event={event} currentUser={user} currentVendor={vendor} />
+
+      {/* Mappa geografica (Google Maps embed) del luogo dell'evento.
+          Aiuta i venditori a capire dove parcheggiare il furgone. */}
+      <EventMap location={event.location} title={event.title} />
     </div>
   )
 }

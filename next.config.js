@@ -14,6 +14,9 @@ const CSP_DIRECTIVES = [
   "font-src 'self' data:",
   // Supabase API (sostituisce '*.supabase.co' con il tuo progetto se vuoi restringere)
   "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+  // Embed Google Maps (solo l'URL ?output=embed, niente API key).
+  // Serve esplicitamente perche' default-src 'self' bloccherebbe l'iframe.
+  "frame-src 'self' https://www.google.com https://maps.google.com",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
