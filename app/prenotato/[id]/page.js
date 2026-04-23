@@ -155,13 +155,19 @@ export default async function PrenotatoPage({ params }) {
           </a>
         )}
         {ev?.id && (
-          <Link
+          // <a> normale (non <Link>) per forzare un full-page reload.
+          // Next.js App Router tiene in cache client-side le pagine gia'
+          // visitate: con <Link> l'utente vedrebbe la mappa "congelata"
+          // al primo caricamento (il posteggio appena prenotato sembra
+          // ancora libero) finche' non arriva un evento Realtime o un
+          // refresh manuale. Un anchor <a> hard-naviga e rifetcha tutto.
+          <a
             href={`/evento/${ev.id}`}
             className="text-center text-sm rounded-xl py-3 px-4 border border-stone-200 text-stone-700 hover:bg-stone-50 transition-colors no-underline flex items-center justify-center gap-2"
           >
             <span aria-hidden="true">🗺</span>
             Torna alla mappa
-          </Link>
+          </a>
         )}
       </div>
 
