@@ -25,6 +25,7 @@ export default function EventForm({ initialEvent = null }) {
     rows:            initialEvent?.rows            ?? 5,
     cols:            initialEvent?.cols            ?? 8,
     price_per_stall: initialEvent?.price_per_stall ?? 35,
+    image_url:       initialEvent?.image_url       ?? '',
     active:          initialEvent?.active          ?? true,
   })
 
@@ -55,6 +56,7 @@ export default function EventForm({ initialEvent = null }) {
             date:            form.date,
             location:        form.location,
             price_per_stall: Number(form.price_per_stall),
+            image_url:       form.image_url?.trim() || '',
             active:          !!form.active,
           }
         : {
@@ -65,6 +67,7 @@ export default function EventForm({ initialEvent = null }) {
             rows:            Number(form.rows),
             cols:            Number(form.cols),
             price_per_stall: Number(form.price_per_stall),
+            image_url:       form.image_url?.trim() || undefined,
           }
 
       const res = await fetch(url, {
@@ -169,6 +172,33 @@ export default function EventForm({ initialEvent = null }) {
             onChange={e => set('location', e.target.value)}
             className="w-full text-sm border border-stone-200 rounded-lg px-3 py-2.5 focus:outline-none focus:border-amber-400"
           />
+        </div>
+
+        <div>
+          <label className="block text-xs text-stone-500 mb-1.5">
+            URL immagine <span className="text-stone-400">(opzionale)</span>
+          </label>
+          <input
+            type="url"
+            value={form.image_url}
+            onChange={e => set('image_url', e.target.value)}
+            placeholder="https://..."
+            className="w-full text-sm border border-stone-200 rounded-lg px-3 py-2.5 focus:outline-none focus:border-amber-400"
+          />
+          {form.image_url && (
+            <div className="mt-2 rounded-lg overflow-hidden border border-stone-200 bg-stone-50">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={form.image_url}
+                alt="Anteprima"
+                className="w-full h-32 object-cover"
+                onError={(e) => { e.currentTarget.style.display = 'none' }}
+              />
+            </div>
+          )}
+          <p className="text-[11px] text-stone-400 mt-1.5">
+            Incolla un link pubblico (Imgur, Wikipedia, Drive pubblico). Appare come banner nella card dell'evento.
+          </p>
         </div>
 
         {isEdit && (

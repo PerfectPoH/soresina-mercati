@@ -152,6 +152,15 @@ html.dark .text-amber-700 { color: #FAC775 !important; }
 html.dark .text-amber-800 { color: #FAE0B0 !important; }
 html.dark .text-amber-900 { color: #FAEEDA !important; }
 
+/* Palette brand personalizzata (vedi tailwind.config.js). */
+html.dark .text-amber-dark  { color: #FAC775 !important; }
+html.dark .text-amber-deep  { color: #FAE0B0 !important; }
+html.dark .bg-cream-50      { background-color: #1f1d1b !important; }
+html.dark .bg-cream-100     { background-color: #2a2826 !important; }
+html.dark .bg-cream-200     { background-color: #3a3734 !important; }
+html.dark .text-sage-500    { color: #A7B9A0 !important; }
+html.dark .text-sage-700    { color: #C7D4C2 !important; }
+
 /* Input */
 html.dark input[type="text"],
 html.dark input[type="email"],

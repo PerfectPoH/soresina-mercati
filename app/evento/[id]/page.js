@@ -120,16 +120,31 @@ export default async function EventoPage({ params }) {
         <span className="text-stone-700">{event.title}</span>
       </div>
 
+      {/* Hero image (se presente). Si nasconde in caso di errore di caricamento
+          cosi' un URL rotto non lascia un riquadro vuoto. */}
+      {event.image_url && (
+        <div className="mb-6 rounded-2xl overflow-hidden border border-stone-200 bg-cream-50">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={event.image_url}
+            alt={event.title}
+            loading="eager"
+            decoding="async"
+            className="w-full max-h-72 object-cover"
+          />
+        </div>
+      )}
+
       {/* Header evento */}
       <div className="mb-6">
-        <h1 className="text-2xl font-medium text-stone-900 mb-1">{event.title}</h1>
+        <h1 className="text-2xl font-semibold text-stone-900 mb-1 tracking-tight">{event.title}</h1>
         <div className="flex flex-wrap gap-3 text-sm text-stone-500">
           <span>📅 {formatDate(event.date)}</span>
           <span>📍 {event.location}</span>
           <span>💶 {event.price_per_stall}€ / giornata</span>
         </div>
         {event.description && (
-          <p className="mt-2 text-stone-500 text-sm">{event.description}</p>
+          <p className="mt-2 text-stone-500 text-sm leading-relaxed">{event.description}</p>
         )}
       </div>
 

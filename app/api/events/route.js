@@ -9,6 +9,7 @@ import {
   validateIsoDate,
   validateInt,
   validateNumber,
+  validateUrl,
 } from '@/lib/validate'
 
 // POST /api/events
@@ -32,9 +33,10 @@ export async function POST(request) {
       ['rows',            validateInt(body.rows,           { field: 'Righe', min: 1, max: 10 })],
       ['cols',            validateInt(body.cols,           { field: 'Colonne', min: 1, max: 20 })],
       ['price_per_stall', validateNumber(body.price_per_stall, { field: 'Prezzo', min: 0, max: 1000 })],
+      ['image_url',       validateUrl(body.image_url,      { field: 'URL immagine', required: false })],
     ])
     if (!v.ok) return NextResponse.json({ error: 'invalid_input', message: v.error }, { status: 400 })
-    const { title, description, date, location, rows, cols, price_per_stall } = v.data
+    const { title, description, date, location, rows, cols, price_per_stall, image_url } = v.data
 
     const supabase = createSupabaseServerClient()
 
@@ -69,6 +71,7 @@ export async function POST(request) {
         rows,
         cols,
         price_per_stall,
+        image_url:       image_url || null,
         active:          true,
       })
       .select()

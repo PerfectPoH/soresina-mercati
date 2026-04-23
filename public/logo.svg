@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 48" role="img" aria-label="Mercati Soresina - Pro Loco">
+  <!-- Logomark: tetto bancarella stilizzato -->
+  <g transform="translate(0 4)">
+    <!-- Base bancarella con angoli arrotondati -->
+    <rect x="2" y="2" width="38" height="38" rx="9" fill="#BA7517"/>
+    <!-- Tetto a due falde -->
+    <path d="M8 20 L21 10 L34 20 L34 22.5 L8 22.5 Z" fill="#FAEEDA"/>
+    <!-- Cupola del tetto (ombra) -->
+    <path d="M21 10 L34 20 L34 22.5 L21 22.5 Z" fill="#FAC775" opacity="0.55"/>
+    <!-- Griglia posteggi 2x2 -->
+    <rect x="11" y="26" width="8" height="9" rx="1.5" fill="#FAEEDA" opacity="0.9"/>
+    <rect x="23" y="26" width="8" height="9" rx="1.5" fill="#FAEEDA" opacity="0.9"/>
+    <!-- Piccola pennellata che suggerisce "piazza" -->
+    <rect x="11" y="35.5" width="20" height="1.5" rx="0.75" fill="#5B3A08" opacity="0.35"/>
+  </g>
+
+  <!-- Wordmark -->
+  <g transform="translate(52 0)" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif">
+    <text x="0" y="22" font-size="18" font-weight="600" fill="#1a1a18" letter-spacing="-0.01em">Mercati Soresina</text>
+    <text x="0" y="38" font-size="10" font-weight="500" fill="#8A5711" letter-spacing="0.08em" text-transform="uppercase">Pro Loco · Bancarelle online</text>
+  </g>
+</svg>

@@ -28,18 +28,27 @@ export default async function Header() {
   return (
     <header className="bg-white border-b border-stone-200 sticky top-0 z-50">
       <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2.5 no-underline">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#BA7517' }}>
-            <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-              <rect x="2" y="9" width="16" height="9" rx="1.5" fill="white" opacity="0.9"/>
-              <path d="M1 9L10 2L19 9" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              <rect x="7" y="12" width="3" height="3" rx="0.5" fill="#BA7517"/>
-              <rect x="11" y="12" width="3" height="3" rx="0.5" fill="#BA7517"/>
-            </svg>
-          </div>
-          <div>
-            <span className="font-medium text-sm text-stone-900">Mercati Soresina</span>
-            <span className="hidden sm:inline text-stone-400 text-sm"> — Pro Loco</span>
+        <Link href="/" className="flex items-center gap-2.5 no-underline" aria-label="Mercati Soresina - Home">
+          {/* Logomark: tetto bancarella stilizzato. Inline SVG cosi' i
+              colori del wordmark seguono il tema (dark mode) via classi CSS. */}
+          <svg
+            width="34"
+            height="34"
+            viewBox="0 0 48 48"
+            fill="none"
+            aria-hidden="true"
+            className="shrink-0"
+          >
+            <rect x="2" y="2" width="44" height="44" rx="11" fill="#BA7517"/>
+            <path d="M9 23 L24 11 L39 23 L39 26 L9 26 Z" fill="#FAEEDA"/>
+            <path d="M24 11 L39 23 L39 26 L24 26 Z" fill="#FAC775" opacity="0.55"/>
+            <rect x="13" y="30" width="8" height="9" rx="1.5" fill="#FAEEDA" opacity="0.9"/>
+            <rect x="27" y="30" width="8" height="9" rx="1.5" fill="#FAEEDA" opacity="0.9"/>
+            <rect x="13" y="39.5" width="22" height="1.5" rx="0.75" fill="#5B3A08" opacity="0.35"/>
+          </svg>
+          <div className="flex flex-col leading-tight">
+            <span className="font-semibold text-[15px] text-stone-900 tracking-tight">Mercati Soresina</span>
+            <span className="hidden sm:inline text-[10px] font-medium text-amber-dark uppercase tracking-wider">Pro Loco · Bancarelle online</span>
           </div>
         </Link>
 

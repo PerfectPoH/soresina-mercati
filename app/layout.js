@@ -3,6 +3,18 @@ import Header from '@/components/Header'
 import CookieBanner from '@/components/CookieBanner'
 import { ToastProvider } from '@/components/ToastProvider'
 import Link from 'next/link'
+import { Inter } from 'next/font/google'
+
+// Inter come font di sistema per tutta l'app.
+// next/font scarica il font self-hosted in build time (zero richieste a
+// Google in runtime = niente problemi GDPR) e genera una CSS variable
+// che colleghiamo a Tailwind tramite `font-sans`.
+// `display: 'swap'` evita il FOIT (invisible text) su connessioni lente.
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-sans',
+})
 
 // Base URL per costruire gli URL assoluti nei meta tag OG/Twitter.
 // Next.js 14: se non settata, certi crawler vedono URL relativi e non
@@ -97,11 +109,11 @@ const themeBootScript = `
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="it" suppressHydrationWarning>
+    <html lang="it" suppressHydrationWarning className={inter.variable}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
-      <body className="min-h-screen bg-stone-50">
+      <body className="min-h-screen bg-stone-50 font-sans antialiased">
         <ToastProvider>
           {/* Skip link: visibile solo con focus via tastiera.
               Permette agli utenti screen reader / tastiera di saltare

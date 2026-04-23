@@ -56,28 +56,57 @@ export default async function HomePage() {
             <Link
               key={event.id}
               href={`/evento/${event.id}`}
-              className="group bg-white rounded-xl border border-stone-200 p-5 hover:border-amber-400 hover:shadow-sm transition-all no-underline"
+              className="group bg-white rounded-xl border border-stone-200 hover:border-amber-400 hover:shadow-warm-lg transition-all no-underline overflow-hidden flex flex-col"
             >
-              <div className="flex items-start justify-between mb-3">
-                <span
-                  className="text-xs font-medium px-2 py-0.5 rounded-full"
-                  style={{ background: '#FAEEDA', color: '#BA7517' }}
+              {/* Hero image (opzionale). Se l'immagine non carica
+                  o non e' presente, mostriamo un placeholder crema+ambra
+                  cosi' tutte le card restano visivamente omogenee. */}
+              {event.image_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={event.image_url}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="w-full h-36 object-cover bg-cream-100"
+                  onError={(e) => { e.currentTarget.style.display = 'none' }}
+                />
+              ) : (
+                <div
+                  className="w-full h-36 flex items-center justify-center"
+                  style={{ background: 'linear-gradient(135deg, #FAEEDA 0%, #FAC775 100%)' }}
+                  aria-hidden="true"
                 >
-                  {formatDate(event.date).split(' ').slice(1).join(' ')}
-                </span>
-                <span className="text-stone-300 group-hover:text-amber-500 transition-colors text-sm">→</span>
-              </div>
-              <h2 className="font-medium text-stone-900 text-base mb-1 group-hover:text-amber-800 transition-colors">
-                {event.title}
-              </h2>
-              {event.description && (
-                <p className="text-stone-400 text-sm mb-3 leading-relaxed">{event.description}</p>
+                  <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                    <path d="M9 23 L24 11 L39 23 L39 26 L9 26 Z" fill="#BA7517" opacity="0.7"/>
+                    <rect x="13" y="30" width="8" height="9" rx="1.5" fill="#BA7517" opacity="0.6"/>
+                    <rect x="27" y="30" width="8" height="9" rx="1.5" fill="#BA7517" opacity="0.6"/>
+                  </svg>
+                </div>
               )}
-              <div className="flex items-center gap-3 text-xs text-stone-400 mt-3 pt-3 border-t border-stone-100">
-                <span>📍 {event.location}</span>
-                <span className="ml-auto font-medium text-stone-600">
-                  {event.rows * event.cols} posteggi · {event.price_per_stall}€/g
-                </span>
+
+              <div className="p-5 flex flex-col flex-1">
+                <div className="flex items-start justify-between mb-3">
+                  <span
+                    className="text-xs font-medium px-2 py-0.5 rounded-full"
+                    style={{ background: '#FAEEDA', color: '#BA7517' }}
+                  >
+                    {formatDate(event.date).split(' ').slice(1).join(' ')}
+                  </span>
+                  <span className="text-stone-300 group-hover:text-amber-500 transition-colors text-sm">→</span>
+                </div>
+                <h2 className="font-medium text-stone-900 text-base mb-1 group-hover:text-amber-800 transition-colors">
+                  {event.title}
+                </h2>
+                {event.description && (
+                  <p className="text-stone-400 text-sm mb-3 leading-relaxed">{event.description}</p>
+                )}
+                <div className="flex items-center gap-3 text-xs text-stone-400 mt-auto pt-3 border-t border-stone-100">
+                  <span>📍 {event.location}</span>
+                  <span className="ml-auto font-medium text-stone-600">
+                    {event.rows * event.cols} posteggi · {event.price_per_stall}€/g
+                  </span>
+                </div>
               </div>
             </Link>
           ))}

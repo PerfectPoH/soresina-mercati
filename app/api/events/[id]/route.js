@@ -9,6 +9,7 @@ import {
   validateString,
   validateIsoDate,
   validateNumber,
+  validateUrl,
 } from '@/lib/validate'
 
 async function requireAdmin(supabase) {
@@ -92,6 +93,16 @@ export async function PATCH(request, { params }) {
       const r = validateNumber(body.price_per_stall, { field: 'Prezzo', min: 0, max: 1000 })
       if (!r.ok) return NextResponse.json({ error: 'invalid_input', message: r.error }, { status: 400 })
       update.price_per_stall = r.value
+    }
+    if (body.image_url !== undefined) {
+      // Stringa vuota -> rimuovi immagine esistente
+      if (body.image_url === '' || body.image_url === null) {
+        update.image_url = null
+      } else {
+        const r = validateUrl(body.image_url, { field: 'URL immagine', required: false })
+        if (!r.ok) return NextResponse.json({ error: 'invalid_input', message: r.error }, { status: 400 })
+        update.image_url = r.value
+      }
     }
 
     if (Object.keys(update).length === 0) {
