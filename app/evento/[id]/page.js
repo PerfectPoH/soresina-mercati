@@ -102,7 +102,10 @@ export default async function EventoPage({ params }) {
     getCurrentVendor(),
   ])
 
-  const freeCount = stalls.filter(s => s.stall_status === 'free').length
+  const freeCount    = stalls.filter(s => s.stall_status === 'free').length
+  const bookedCount  = stalls.filter(s => s.stall_status === 'booked').length
+  const pendingCount = stalls.filter(s => s.stall_status === 'pending').length
+  const blockedCount = stalls.filter(s => s.stall_status === 'blocked').length
   const isFull    = freeCount === 0 && stalls.length > 0
   const isAdmin   = vendor?.role === 'admin'
 
@@ -199,6 +202,34 @@ export default async function EventoPage({ params }) {
             position={waitlist?.position}
             totalEntries={waitlist?.totalEntries}
           />
+        </div>
+      )}
+
+      {/* Pill row: riepilogo stato posteggi. Da' al visitatore il senso
+          della disponibilita' prima ancora di guardare la mappa. Ogni
+          stato usa la stessa coppia bg/fg che appare poi sulla griglia. */}
+      {stalls.length > 0 && (
+        <div className="mb-4 flex flex-wrap gap-2 text-xs font-medium" aria-label="Stato posteggi">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-sage-100 text-sage-700">
+            <span className="w-1.5 h-1.5 rounded-full bg-sage-500" aria-hidden="true" />
+            {freeCount} liberi
+          </span>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-stone-100 text-stone-600">
+            <span className="w-1.5 h-1.5 rounded-full bg-stone-400" aria-hidden="true" />
+            {bookedCount} prenotati
+          </span>
+          {pendingCount > 0 && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-light text-amber-dark">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-mid" aria-hidden="true" />
+              {pendingCount} in attesa
+            </span>
+          )}
+          {blockedCount > 0 && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-50 text-red-700">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-400" aria-hidden="true" />
+              {blockedCount} bloccati
+            </span>
+          )}
         </div>
       )}
 

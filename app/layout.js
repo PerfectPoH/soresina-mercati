@@ -128,7 +128,7 @@ export default function RootLayout({ children }) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
-      <body className="min-h-screen bg-stone-50 font-sans antialiased">
+      <body className="min-h-screen bg-cream-50 font-sans antialiased">
         <ToastProvider>
           {/* Skip link: visibile solo con focus via tastiera.
               Permette agli utenti screen reader / tastiera di saltare
