@@ -147,7 +147,7 @@ export default function StallMap({ stalls, event, currentUser, currentVendor }) 
     setLocalStalls(prev =>
       prev.map(s =>
         s.id === booking.stall_id
-          ? { ...s, stall_status: 'busy', vendor_name: booking.vendor_name, booking_status: 'confirmed' }
+          ? { ...s, stall_status: 'booked', vendor_name: booking.vendor_name, booking_status: 'confirmed' }
           : s
       )
     )
@@ -159,7 +159,7 @@ export default function StallMap({ stalls, event, currentUser, currentVendor }) 
     setLocalStalls(prev =>
       prev.map(s =>
         s.id === stall.id
-          ? { ...s, stall_status: 'busy', booking_status: 'confirmed' }
+          ? { ...s, stall_status: 'booked', booking_status: 'confirmed' }
           : s
       )
     )
@@ -173,7 +173,9 @@ export default function StallMap({ stalls, event, currentUser, currentVendor }) 
   }
 
   const freeCount    = localStalls.filter(s => s.stall_status === 'free').length
-  const busyCount    = localStalls.filter(s => s.stall_status === 'busy').length
+  // Lo stato "pending" (prenotazione non ancora confermata) conta come occupato
+  // nella UI del vendor: non e' libero, quindi non e' prenotabile.
+  const busyCount    = localStalls.filter(s => s.stall_status === 'booked' || s.stall_status === 'pending').length
   const blockedCount = localStalls.filter(s => s.stall_status === 'blocked').length
 
   return (
@@ -265,6 +267,10 @@ export default function StallMap({ stalls, event, currentUser, currentVendor }) 
             Occupato
           </span>
           <span className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded bg-amber-100 border border-amber-300 inline-block" />
+            In attesa
+          </span>
+          <span className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded bg-red-200 border border-red-400 inline-block" />
             Bloccato
           </span>
@@ -313,11 +319,14 @@ export default function StallMap({ stalls, event, currentUser, currentVendor }) 
                       }
 
                       const status     = stall.stall_status
-                      const isBusy     = status === 'busy'
+                      const isBooked   = status === 'booked'
+                      const isPending  = status === 'pending'
                       const isBlocked  = status === 'blocked'
+                      const isFree     = status === 'free'
                       const isSelected = selected?.id === stall.id
-                      // I non-admin non possono interagire con busy/blocked
-                      const disabled   = !isAdmin && (isBusy || isBlocked)
+                      // I non-admin possono interagire SOLO con posteggi liberi.
+                      // Booked/pending/blocked sono tutti non-cliccabili per vendor.
+                      const disabled   = !isAdmin && !isFree
 
                       // min-w/h = cellSize -> scala con zoom utente.
                       // aspect-square mantiene la proporzione quadrata.
@@ -329,9 +338,15 @@ export default function StallMap({ stalls, event, currentUser, currentVendor }) 
                       } else if (isBlocked) {
                         cls += 'bg-red-200 border-red-400 text-red-800 '
                         cls += isAdmin ? 'cursor-pointer hover:bg-red-300 active:bg-red-300' : 'cursor-not-allowed opacity-70'
-                      } else if (isBusy) {
+                      } else if (isBooked) {
                         cls += 'bg-stone-200 border-stone-300 text-stone-500 '
                         cls += isAdmin ? 'cursor-pointer hover:bg-stone-300 active:bg-stone-300' : 'cursor-not-allowed'
+                      } else if (isPending) {
+                        // Prenotazione non ancora confermata: giallo sabbia per
+                        // distinguere visivamente da "booked" (grigio) senza
+                        // confondere con "selected" (ambra piena).
+                        cls += 'bg-amber-100 border-amber-300 text-amber-800 '
+                        cls += isAdmin ? 'cursor-pointer hover:bg-amber-200 active:bg-amber-200' : 'cursor-not-allowed opacity-80'
                       } else {
                         cls += 'bg-green-100 border-green-400 text-green-800 hover:scale-105 active:scale-105 cursor-pointer hover:bg-green-200 active:bg-green-200'
                       }
@@ -340,16 +355,20 @@ export default function StallMap({ stalls, event, currentUser, currentVendor }) 
 
                       const title = isBlocked
                         ? `${stall.label} — Bloccato${stall.blocked_reason ? `: ${stall.blocked_reason}` : ''}`
-                        : isBusy
+                        : isBooked
                           ? `${stall.label} — ${stall.vendor_name || 'Occupato'}`
-                          : stall.label
+                          : isPending
+                            ? `${stall.label} — In attesa di conferma`
+                            : stall.label
 
                       // Label piu' descrittiva per screen reader
                       const ariaLabel = isBlocked
                         ? `Posteggio ${stall.label}, bloccato${stall.blocked_reason ? `: ${stall.blocked_reason}` : ''}`
-                        : isBusy
+                        : isBooked
                           ? `Posteggio ${stall.label}, occupato${stall.vendor_name ? ` da ${stall.vendor_name}` : ''}`
-                          : `Posteggio ${stall.label}, disponibile`
+                          : isPending
+                            ? `Posteggio ${stall.label}, in attesa di conferma`
+                            : `Posteggio ${stall.label}, disponibile`
 
                       const btnStyle = { minWidth: cellSize, minHeight: cellSize }
                       if (isSelected) btnStyle.background = '#FAC775'

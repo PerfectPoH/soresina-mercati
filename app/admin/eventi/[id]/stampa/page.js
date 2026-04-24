@@ -45,7 +45,9 @@ export default async function StampaEventoPage({ params }) {
   const stalls = await getStalls(event.id)
 
   const totalCount    = stalls.length
-  const bookedCount   = stalls.filter(s => s.stall_status === 'busy').length
+  // 'booked' = confermato, 'pending' = in attesa di conferma.
+  // Li conto entrambi come "prenotati" nel report di stampa.
+  const bookedCount   = stalls.filter(s => s.stall_status === 'booked' || s.stall_status === 'pending').length
   const blockedCount  = stalls.filter(s => s.stall_status === 'blocked').length
   const freeCount     = stalls.filter(s => s.stall_status === 'free').length
 
@@ -119,7 +121,8 @@ export default async function StampaEventoPage({ params }) {
         <tbody>
           {stalls.map(s => {
             const status = s.stall_status
-            const stateLabel = status === 'busy'    ? 'Prenotato'
+            const stateLabel = status === 'booked'  ? 'Prenotato'
+                             : status === 'pending' ? 'In attesa'
                              : status === 'blocked' ? (s.blocked_reason ? `Bloccato (${s.blocked_reason})` : 'Bloccato')
                              : 'Libero'
             return (

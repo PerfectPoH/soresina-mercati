@@ -19,7 +19,7 @@ export default function AdminStallPanel({
   const [busy,    setBusy]    = useState(false)
   const [error,   setError]   = useState(null)
 
-  const status = stall.stall_status // 'free' | 'busy' | 'blocked'
+  const status = stall.stall_status // 'free' | 'booked' | 'pending' | 'blocked'
 
   async function callApi(method, url, body) {
     setBusy(true)
@@ -72,9 +72,10 @@ export default function AdminStallPanel({
   }
 
   const statusBadge = {
-    free:    { label: 'Libero',   bg: '#EAF3DE', fg: '#3B6D11' },
-    busy:    { label: 'Occupato', bg: '#F1EFE8', fg: '#5F5E5A' },
-    blocked: { label: 'Bloccato', bg: '#FDECEC', fg: '#B71C1C' },
+    free:    { label: 'Libero',     bg: '#EAF3DE', fg: '#3B6D11' },
+    booked:  { label: 'Occupato',   bg: '#F1EFE8', fg: '#5F5E5A' },
+    pending: { label: 'In attesa',  bg: '#FEF3C7', fg: '#92400E' },
+    blocked: { label: 'Bloccato',   bg: '#FDECEC', fg: '#B71C1C' },
   }[status] || { label: status, bg: '#EEE', fg: '#333' }
 
   return (
@@ -94,8 +95,8 @@ export default function AdminStallPanel({
         </span>
       </div>
 
-      {/* Stato: OCCUPATO */}
-      {status === 'busy' && (
+      {/* Stato: OCCUPATO (prenotazione confermata) */}
+      {status === 'booked' && (
         <div className="space-y-3 text-sm">
           <div className="bg-stone-50 rounded-lg p-3">
             <div className="font-medium text-stone-800">{stall.vendor_name}</div>
@@ -113,6 +114,26 @@ export default function AdminStallPanel({
             className="w-full text-sm border border-red-200 text-red-600 rounded-lg py-2 hover:bg-red-50 transition-colors disabled:opacity-50"
           >
             {busy ? '...' : 'Annulla prenotazione'}
+          </button>
+        </div>
+      )}
+
+      {/* Stato: IN ATTESA DI CONFERMA (prenotazione non ancora confermata) */}
+      {status === 'pending' && (
+        <div className="space-y-3 text-sm">
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+            <div className="font-medium text-amber-900">{stall.vendor_name || 'Prenotazione in attesa'}</div>
+            <div className="text-xs text-amber-700 mt-1">
+              Conferma non ancora effettuata. Puoi annullare la richiesta.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleCancelBooking}
+            disabled={busy || !stall.booking_id}
+            className="w-full text-sm border border-red-200 text-red-600 rounded-lg py-2 hover:bg-red-50 transition-colors disabled:opacity-50"
+          >
+            {busy ? '...' : 'Annulla richiesta'}
           </button>
         </div>
       )}
