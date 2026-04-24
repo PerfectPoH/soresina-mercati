@@ -1,9 +1,8 @@
 import { supabase } from '@/lib/supabase'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { safeLogError } from '@/lib/log'
-import StallMap from '@/components/StallMap'
+import StallMapTabs from '@/components/StallMapTabs'
 import WaitlistWidget from '@/components/WaitlistWidget'
-import EventMap from '@/components/EventMap'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 
@@ -121,33 +120,73 @@ export default async function EventoPage({ params }) {
         <span className="text-stone-700">{event.title}</span>
       </div>
 
-      {/* Hero image (se presente). Si nasconde in caso di errore di caricamento
-          cosi' un URL rotto non lascia un riquadro vuoto. */}
-      {event.image_url && (
-        <div className="mb-6 rounded-2xl overflow-hidden border border-stone-200 bg-cream-50">
+      {/* Hero evento. Due varianti:
+          - Con immagine: hero grande (h-80 sm, 96 lg) con gradient overlay
+            in basso e titolo sovrapposto. Fa il feel "rivista"/brochure.
+          - Senza immagine: header classico con background crema, titolo serif.
+          La chip data resta visibile in entrambi i casi. */}
+      {event.image_url ? (
+        <div className="mb-8 relative rounded-2xl overflow-hidden border border-stone-200 shadow-warm-lg">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={event.image_url}
-            alt={event.title}
+            alt=""
             loading="eager"
             decoding="async"
-            className="w-full max-h-72 object-cover"
+            className="w-full h-72 sm:h-80 lg:h-[26rem] object-cover"
           />
+          {/* Gradient overlay + testo sovrapposto in basso.
+              pointer-events-none in modo che un eventuale click "buchi"
+              verso eventuali bottoni sotto l'hero (qui non ce ne sono,
+              ma e' abitudine safe). */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background:
+                'linear-gradient(to top, rgba(28,25,23,0.80) 0%, rgba(28,25,23,0.25) 45%, rgba(28,25,23,0) 65%)',
+            }}
+            aria-hidden="true"
+          />
+          <div className="absolute inset-x-0 bottom-0 p-5 sm:p-7 text-white">
+            <span
+              className="inline-block text-[11px] uppercase tracking-[0.18em] font-medium px-2.5 py-1 rounded-full bg-white/95"
+              style={{ color: '#5B3A08' }}
+            >
+              {formatDate(event.date)}
+            </span>
+            <h1 className="mt-3 font-display font-semibold text-3xl sm:text-4xl lg:text-5xl leading-[1.08] tracking-tight drop-shadow">
+              {event.title}
+            </h1>
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-white/90">
+              <span>📍 {event.location}</span>
+              <span>💶 {event.price_per_stall}€ / giornata</span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="mb-8 rounded-2xl border border-stone-200 bg-cream-50 p-6 sm:p-8 shadow-warm">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="h-px w-8 bg-amber-brand" aria-hidden="true" />
+            <span className="text-[11px] uppercase tracking-[0.18em] font-medium text-amber-dark">
+              {formatDate(event.date)}
+            </span>
+          </div>
+          <h1 className="font-display font-semibold text-3xl sm:text-4xl text-amber-deep leading-[1.08] tracking-tight">
+            {event.title}
+          </h1>
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-stone-600">
+            <span>📍 {event.location}</span>
+            <span>💶 {event.price_per_stall}€ / giornata</span>
+          </div>
         </div>
       )}
 
-      {/* Header evento */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-stone-900 mb-1 tracking-tight">{event.title}</h1>
-        <div className="flex flex-wrap gap-3 text-sm text-stone-500">
-          <span>📅 {formatDate(event.date)}</span>
-          <span>📍 {event.location}</span>
-          <span>💶 {event.price_per_stall}€ / giornata</span>
-        </div>
-        {event.description && (
-          <p className="mt-2 text-stone-500 text-sm leading-relaxed">{event.description}</p>
-        )}
-      </div>
+      {/* Descrizione (se presente) */}
+      {event.description && (
+        <p className="mb-6 text-stone-600 text-base leading-relaxed max-w-2xl">
+          {event.description}
+        </p>
+      )}
 
       {/* Banner lista d'attesa (evento pieno, vendor non admin) */}
       {isFull && !isAdmin && (
@@ -163,12 +202,10 @@ export default async function EventoPage({ params }) {
         </div>
       )}
 
-      {/* Mappa interattiva dei posteggi */}
-      <StallMap stalls={stalls} event={event} currentUser={user} currentVendor={vendor} />
-
-      {/* Mappa geografica (Google Maps embed) del luogo dell'evento.
-          Aiuta i venditori a capire dove parcheggiare il furgone. */}
-      <EventMap location={event.location} title={event.title} />
+      {/* Mappa interattiva dei posteggi — tab Griglia + Satellite.
+          Il tab Satellite mostra i posteggi posizionati dall'admin sulla
+          vista aerea Esri World Imagery (senza API key ne' billing). */}
+      <StallMapTabs stalls={stalls} event={event} currentUser={user} currentVendor={vendor} />
     </div>
   )
 }

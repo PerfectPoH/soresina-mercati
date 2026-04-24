@@ -37,13 +37,18 @@ module.exports = {
         },
       },
       fontFamily: {
-        sans:  ['var(--font-sans)', 'system-ui', 'sans-serif'],
-        brand: ['var(--font-sans)', 'system-ui', 'sans-serif'],
+        sans:    ['var(--font-sans)',    'system-ui', 'sans-serif'],
+        brand:   ['var(--font-sans)',    'system-ui', 'sans-serif'],
+        // "display" = Fraunces, serif caldo per H1 istituzionali e
+        // titoli hero. Non usarlo per body text (leggibilita' peggiore
+        // a dimensioni piccole).
+        display: ['var(--font-display)', 'ui-serif',  'Georgia', 'serif'],
       },
       // Box shadow piu' morbide e calde per matchare la palette crema
       boxShadow: {
         warm:     '0 1px 3px 0 rgba(91, 58, 8, 0.08), 0 1px 2px -1px rgba(91, 58, 8, 0.06)',
         'warm-lg':'0 4px 12px -2px rgba(91, 58, 8, 0.12), 0 2px 4px -2px rgba(91, 58, 8, 0.08)',
+        'warm-xl':'0 12px 32px -8px rgba(91, 58, 8, 0.18), 0 4px 8px -4px rgba(91, 58, 8, 0.08)',
       },
     },
   },

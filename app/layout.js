@@ -3,9 +3,9 @@ import Header from '@/components/Header'
 import CookieBanner from '@/components/CookieBanner'
 import { ToastProvider } from '@/components/ToastProvider'
 import Link from 'next/link'
-import { Inter } from 'next/font/google'
+import { Inter, Fraunces } from 'next/font/google'
 
-// Inter come font di sistema per tutta l'app.
+// Inter come font di sistema per tutto il body.
 // next/font scarica il font self-hosted in build time (zero richieste a
 // Google in runtime = niente problemi GDPR) e genera una CSS variable
 // che colleghiamo a Tailwind tramite `font-sans`.
@@ -14,6 +14,21 @@ const inter = Inter({
   subsets: ['latin'],
   display: 'swap',
   variable: '--font-sans',
+})
+
+// Fraunces = serif display "warm" con OpTypical ratio leggermente
+// idealizzato — perfetto per H1 istituzionali (tipo un menu di trattoria,
+// non SaaS). Variabile (asse wght): un solo file font che supporta tutti
+// i pesi 400-700, piu' leggero da scaricare rispetto ai pesi separati.
+// Usato SOLO per i titoli grossi: Inter resta il default del body.
+const fraunces = Fraunces({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-display',
+  style: ['normal'],
+  // Asse opsz: "optical size" — chiediamo la variante display (occhio
+  // piu' aperto, spaziatura piu' generosa a dimensioni grandi).
+  axes: ['opsz'],
 })
 
 // Base URL per costruire gli URL assoluti nei meta tag OG/Twitter.
@@ -109,7 +124,7 @@ const themeBootScript = `
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="it" suppressHydrationWarning className={inter.variable}>
+    <html lang="it" suppressHydrationWarning className={`${inter.variable} ${fraunces.variable}`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>

@@ -38,26 +38,37 @@ export default async function HomePage() {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-medium text-stone-900 mb-1">
+      {/* Hero "warm & sofisticato": eyebrow in amber, titolo serif Fraunces,
+          sottotitolo in sans. Flourish decorativo sottile a sinistra.
+          Il feel e' piu' "rivista di paese" che "dashboard SaaS". */}
+      <div className="mb-10 relative">
+        <div className="flex items-center gap-3 mb-3">
+          <span className="h-px w-8 bg-amber-brand" aria-hidden="true" />
+          <span className="text-[11px] uppercase tracking-[0.18em] font-medium text-amber-dark">
+            Pro Loco Soresina
+          </span>
+        </div>
+        <h1 className="font-display font-medium text-4xl sm:text-5xl text-amber-deep leading-[1.08] tracking-tight mb-3">
           Prossimi mercati
         </h1>
-        <p className="text-stone-500 text-sm">
-          Prenota il tuo posteggio per i mercati di Soresina
+        <p className="text-stone-600 text-base max-w-xl leading-relaxed">
+          Prenota il tuo posteggio per i mercati e le sagre di Soresina,
+          direttamente online. Scegli la data, scegli la posizione sulla mappa,
+          conferma in un minuto.
         </p>
       </div>
 
       {events.length === 0 ? (
-        <div className="bg-white rounded-xl border border-stone-200 p-10 text-center text-stone-400">
+        <div className="bg-white rounded-2xl border border-stone-200 p-10 text-center text-stone-400 shadow-warm">
           Nessun evento in programma al momento.
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {events.map(event => (
             <Link
               key={event.id}
               href={`/evento/${event.id}`}
-              className="group bg-white rounded-xl border border-stone-200 hover:border-amber-400 hover:shadow-warm-lg transition-all no-underline overflow-hidden flex flex-col"
+              className="group bg-white rounded-2xl border border-stone-200 shadow-warm hover:shadow-warm-xl hover:border-amber-300 hover:-translate-y-0.5 transition-all duration-200 no-underline overflow-hidden flex flex-col"
             >
               {/* Hero image (opzionale). Se l'URL e' rotto o assente,
                   il componente mostra il placeholder gradient ambra col
@@ -69,22 +80,27 @@ export default async function HomePage() {
               <div className="p-5 flex flex-col flex-1">
                 <div className="flex items-start justify-between mb-3">
                   <span
-                    className="text-xs font-medium px-2 py-0.5 rounded-full"
+                    className="text-xs font-medium px-2.5 py-1 rounded-full tracking-wide"
                     style={{ background: '#FAEEDA', color: '#BA7517' }}
                   >
                     {formatDate(event.date).split(' ').slice(1).join(' ')}
                   </span>
-                  <span className="text-stone-300 group-hover:text-amber-500 transition-colors text-sm">→</span>
+                  <span
+                    className="text-stone-300 group-hover:text-amber-brand group-hover:translate-x-1 transition-all text-lg"
+                    aria-hidden="true"
+                  >
+                    →
+                  </span>
                 </div>
-                <h2 className="font-medium text-stone-900 text-base mb-1 group-hover:text-amber-800 transition-colors">
+                <h2 className="font-display font-medium text-stone-900 text-xl mb-1.5 leading-tight group-hover:text-amber-dark transition-colors">
                   {event.title}
                 </h2>
                 {event.description && (
-                  <p className="text-stone-400 text-sm mb-3 leading-relaxed">{event.description}</p>
+                  <p className="text-stone-500 text-sm mb-3 leading-relaxed line-clamp-2">{event.description}</p>
                 )}
                 <div className="flex items-center gap-3 text-xs text-stone-400 mt-auto pt-3 border-t border-stone-100">
-                  <span>📍 {event.location}</span>
-                  <span className="ml-auto font-medium text-stone-600">
+                  <span className="truncate">📍 {event.location}</span>
+                  <span className="ml-auto font-medium text-stone-600 whitespace-nowrap">
                     {event.rows * event.cols} posteggi · {event.price_per_stall}€/g
                   </span>
                 </div>

@@ -3,11 +3,15 @@ import { NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { enforceRateLimit } from '@/lib/rate-limit'
 import { safeLogError } from '@/lib/log'
-import { validateUuid, validateString } from '@/lib/validate'
+import { validateUuid, validateString, validateNumber } from '@/lib/validate'
 
 // PATCH /api/stalls/[id]
-// Solo admin: blocca / sblocca manualmente una bancarella.
-// Body: { blocked: boolean, blocked_reason?: string }
+// Solo admin. Due casi d'uso:
+//   1) Blocca / sblocca manualmente una bancarella.
+//      Body: { blocked: boolean, blocked_reason?: string }
+//   2) Posiziona il posteggio sulla mappa satellite (admin geo-editor).
+//      Body: { latitude: number, longitude: number }
+//      Per rimuovere il posizionamento: { latitude: null, longitude: null }
 export async function PATCH(request, { params }) {
   try {
     const limited = enforceRateLimit(request, { prefix: 'stalls-patch', limit: 30, windowMs: 60_000 })
@@ -50,6 +54,25 @@ export async function PATCH(request, { params }) {
       const r = validateString(body.blocked_reason, { field: 'Motivo', required: false, max: 200 })
       if (!r.ok) return NextResponse.json({ error: 'invalid_input', message: r.error }, { status: 400 })
       update.blocked_reason = r.value
+    }
+
+    // Posizionamento geografico (admin-only). Entrambe le coord devono
+    // essere presenti insieme (o entrambe null per rimuovere).
+    // WGS84: lat [-90, +90], lng [-180, +180]. In pratica per Soresina
+    // restiamo a ~45.28, 9.86 — ma il range di validazione e' quello globale.
+    if (body.latitude !== undefined || body.longitude !== undefined) {
+      // Rimozione esplicita
+      if (body.latitude === null && body.longitude === null) {
+        update.latitude  = null
+        update.longitude = null
+      } else {
+        const latR = validateNumber(body.latitude,  { field: 'Latitudine',  min: -90,  max: 90  })
+        if (!latR.ok) return NextResponse.json({ error: 'invalid_input', message: latR.error }, { status: 400 })
+        const lngR = validateNumber(body.longitude, { field: 'Longitudine', min: -180, max: 180 })
+        if (!lngR.ok) return NextResponse.json({ error: 'invalid_input', message: lngR.error }, { status: 400 })
+        update.latitude  = latR.value
+        update.longitude = lngR.value
+      }
     }
 
     if (Object.keys(update).length === 0) {

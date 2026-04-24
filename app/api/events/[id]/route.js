@@ -9,6 +9,7 @@ import {
   validateString,
   validateIsoDate,
   validateNumber,
+  validateInt,
   validateUrl,
 } from '@/lib/validate'
 
@@ -103,6 +104,25 @@ export async function PATCH(request, { params }) {
         if (!r.ok) return NextResponse.json({ error: 'invalid_input', message: r.error }, { status: 400 })
         update.image_url = r.value
       }
+    }
+
+    // Centro + zoom della mappa satellite. Impostati dall'admin via
+    // "Centra mappa qui" nel geo-editor oppure modificati in bulk dalla
+    // dashboard admin. Range globali (lat ±90, lng ±180, zoom 1-22).
+    if (body.map_lat !== undefined) {
+      const r = validateNumber(body.map_lat, { field: 'Latitudine mappa', min: -90, max: 90 })
+      if (!r.ok) return NextResponse.json({ error: 'invalid_input', message: r.error }, { status: 400 })
+      update.map_lat = r.value
+    }
+    if (body.map_lng !== undefined) {
+      const r = validateNumber(body.map_lng, { field: 'Longitudine mappa', min: -180, max: 180 })
+      if (!r.ok) return NextResponse.json({ error: 'invalid_input', message: r.error }, { status: 400 })
+      update.map_lng = r.value
+    }
+    if (body.map_zoom !== undefined) {
+      const r = validateInt(body.map_zoom, { field: 'Zoom mappa', min: 1, max: 22 })
+      if (!r.ok) return NextResponse.json({ error: 'invalid_input', message: r.error }, { status: 400 })
+      update.map_zoom = r.value
     }
 
     if (Object.keys(update).length === 0) {

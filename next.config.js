@@ -10,13 +10,17 @@ const CSP_DIRECTIVES = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
+  // img-src: include explicitly Esri per le tile satellite Leaflet
+  // (server.arcgisonline.com). Il wildcard https: gia' lo copriva, ma
+  // lo scriviamo esplicitamente per documentazione e per se mai
+  // restringeremo img-src in futuro.
+  "img-src 'self' data: blob: https: https://server.arcgisonline.com",
   "font-src 'self' data:",
-  // Supabase API (sostituisce '*.supabase.co' con il tuo progetto se vuoi restringere)
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
-  // Embed Google Maps (solo l'URL ?output=embed, niente API key).
-  // Serve esplicitamente perche' default-src 'self' bloccherebbe l'iframe.
-  "frame-src 'self' https://www.google.com https://maps.google.com",
+  // Supabase API + Esri tile requests (fetch tile layers).
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://server.arcgisonline.com",
+  // frame-src: nessun iframe esterno necessario (rimosso Google Maps embed,
+  // sostituito da Leaflet che usa tiles via <img> non <iframe>).
+  "frame-src 'self'",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
