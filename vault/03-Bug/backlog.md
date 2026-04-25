@@ -106,6 +106,15 @@ Qui verranno segnalati automaticamente dagli agenti eventuali issue noti o debit
 - **Fix proposto**: aggiungere `supabase/.temp/` al `.gitignore`.
 - **Stato**: ✅ RISOLTO in commit `7cc6866`. Pattern aggiunto.
 
+### BUG-013 — Vercel Deployment Protection blocca webhook Stripe sui Preview
+- **Aperto da**: Claude Opus 4.7 (smoke test 2026-04-25)
+- **Severità**: 🔴 CRITICA (silenzioso, scoperto solo a runtime)
+- **Sintomo**: i preview deploy Vercel hanno per default Authentication attiva (`ssoProtection`). Stripe webhook chiama l'endpoint, riceve 401, non riesce a invocare la nostra API. Il booking resta `pending` per sempre nonostante il pagamento sia andato a buon fine.
+- **Diagnosi**: `stripe_events_seen` vuoto + zero runtime log su Vercel webhook → la richiesta non è mai arrivata al nostro codice. Confermato anche dall'esistenza del tool MCP `get_access_to_vercel_url` che genera bypass token (presupposto: protection di default attiva).
+- **Fix applicato**: PATCH `/v9/projects/{id}` con `ssoProtection: null` via Vercel API (token utente). Risultato: HTTP 200, protection disabilitata a livello progetto.
+- **Side effect accettato**: tutti i preview deploy ora sono pubblici. Per scenari multi-team o repo pubblici, la giusta soluzione è usare "Deployment Protection Exceptions" che esclude solo il branch alias `*-git-staging-*` dalla protezione.
+- **Stato**: ✅ RISOLTO. Smoke test post-fix: 2 eventi `checkout.session.completed` ricevuti correttamente, 2 bookings passati a `confirmed`.
+
 ### BUG-012 — `SENTRY_AUTH_TOKEN` mancante su Vercel (source maps non caricati)
 - **Aperto da**: Antigravity (analisi 2026-04-25)
 - **Severità**: 🟡 MEDIA (degrada la qualità del debugging in produzione)
