@@ -29,7 +29,7 @@ Qui verranno segnalati automaticamente dagli agenti eventuali issue noti o debit
   - View non gestisce stato `pending` (necessario per Stripe)
   - 8 file di migrazione storica eliminati senza archivio
 - **Fix proposto**: vedi [[Plan-Stripe-Recovery]] §2 (dump dal DB reale + archivio migrazioni)
-- **Stato**: in attesa di doppia approvazione
+- **Stato**: ✅ RISOLTO in commit `7cc6866` (branch staging). `schema.sql` ricostruito da `pg_get_viewdef` + `pg_get_functiondef` + `pg_policies` su prod. Include colonne reali (`stalls.latitude/longitude`, `events.image_url`, `map_lat/lng/zoom`), view LATERAL con stati (booked/pending/blocked/free), funzioni SECURITY DEFINER, RLS, realtime, stripe_events_seen. Le 8 migrazioni storiche spostate in `supabase/migrations-archive/` con README. Le migration vive (13, 14) in `supabase/migrations/`.
 
 ### BUG-003 — Webhook Stripe non aggiorna lo status del booking (RLS blocca UPDATE)
 - **Aperto da**: Claude Opus 4.7 (review 2026-04-25)
@@ -73,21 +73,21 @@ Qui verranno segnalati automaticamente dagli agenti eventuali issue noti o debit
 - **Conseguenza**: esposizione di credenziali e chiavi private nel repository; rischio accesso non autorizzato all'API locale Obsidian e possibile riuso delle chiavi.
 - **Fix proposto**: rimuovere subito il file dal tracciamento git, rigenerare API key/certificati del plugin, aggiungere regole `.gitignore` per `vault/.obsidian/plugins/obsidian-local-rest-api/data.json` (e in generale file locali con secret).
 - **Evidenza**: verifica diretta del file versionato nel vault durante audit.
-- **Stato**: aperto
+- **Stato**: ✅ RISOLTO in commit `7cc6866`. Il vault non era ancora committato (working tree untracked), quindi i segreti non sono mai arrivati su GitHub. `.gitignore` ora esclude `vault/.obsidian/` interamente (profilattico). **Action item per Salandra**: rigenerare comunque l'API key Obsidian + certificati TLS (Settings > Local REST API > Reset API Key) perché il file resta sul disco locale e potrebbe essere stato letto da Codex 5.3 in chiaro.
 
 ### BUG-008 — Middleware non protegge rotte API e blocca HTTPS redirect globale
 - **Aperto da**: Antigravity (analisi 2026-04-25)
 - **Severità**: 🔴 CRITICA (Security misconfiguration)
 - **Sintomo**: In `middleware.js`, `export const config = { matcher: ['/admin/:path*'] }` limita l'esecuzione del middleware esclusivamente all'area admin. Questo significa che il redirect da HTTP a HTTPS a riga 10-17 NON viene applicato al resto del sito (es. root, `/api/*`). Tutte le API e il frontend sono esposti in chiaro se l'utente digita http://.
 - **Fix proposto**: Rimuovere il matcher restrittivo o usare una regex omnicomprensiva standard: `matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)']`.
-- **Stato**: in attesa di fix da Opus
+- **Stato**: ✅ RISOLTO in commit `7cc6866`. Matcher esteso a tutto il sito (escluso `_next/static`, `_next/image`, `favicon.ico`, asset immagine).
 
 ### BUG-009 — Import ES Module illegale in `lib/rate-limit.js`
 - **Aperto da**: Antigravity (analisi 2026-04-25)
 - **Severità**: 🟡 MEDIA (Tech Debt)
 - **Sintomo**: L'istruzione `import { NextResponse } from 'next/server'` si trova a riga 70. È una violazione delle specifiche ES Modules. Anche se Webpack lo fa funzionare tramite hoisting, potrebbe rompere in contesti edge.
 - **Fix proposto**: Spostare l'import a inizio file.
-- **Stato**: in attesa di fix da Opus
+- **Stato**: ✅ RISOLTO in commit `7cc6866`. Import spostato in cima al file.
 
 ### BUG-010 — Link di conferma registrazione su staging punta a `localhost`
 - **Aperto da**: Salandra (segnalazione runtime 2026-04-25)
@@ -104,7 +104,7 @@ Qui verranno segnalati automaticamente dagli agenti eventuali issue noti o debit
 - **Sintomo**: la cartella `supabase/.temp/` generata dalla Supabase CLI non è presente nel `.gitignore`. Contiene file temporanei di sessione CLI che non devono essere versionati.
 - **Conseguenza**: commit accidentali di file temp in futuro; repo rumoroso.
 - **Fix proposto**: aggiungere `supabase/.temp/` al `.gitignore`.
-- **Stato**: aperto, delegato a Opus con piano corrente
+- **Stato**: ✅ RISOLTO in commit `7cc6866`. Pattern aggiunto.
 
 ### BUG-012 — `SENTRY_AUTH_TOKEN` mancante su Vercel (source maps non caricati)
 - **Aperto da**: Antigravity (analisi 2026-04-25)
