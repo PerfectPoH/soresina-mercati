@@ -120,6 +120,7 @@ export default function BookingForm({
     let payload = null
     let errCode = null
     let errMsg  = null
+    let checkoutUrl = null
 
     try {
       // Timeout di sicurezza a 15s cosi' la UI non resta mai appesa
@@ -145,6 +146,7 @@ export default function BookingForm({
         errMsg  = json.message
       } else {
         payload = json.data
+        checkoutUrl = json.checkoutUrl
       }
     } catch (e) {
       console.error('[BookingForm] fetch error', e)
@@ -183,7 +185,11 @@ export default function BookingForm({
     // Redirect alla pagina di conferma dedicata (bookmarkable, con .ics,
     // dettagli completi, istruzioni).
     if (payload?.id) {
-      router.push(`/prenotato/${payload.id}`)
+      if (checkoutUrl) {
+        window.location.href = checkoutUrl
+      } else {
+        router.push(`/prenotato/${payload.id}`)
+      }
     }
   }
 

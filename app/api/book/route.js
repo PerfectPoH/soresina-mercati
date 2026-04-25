@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { enforceRateLimit } from '@/lib/rate-limit'
 import { safeLogError } from '@/lib/log'
+import Stripe from 'stripe'
 import {
   runValidators,
   validateString,
@@ -11,10 +12,36 @@ import {
   GOODS_TYPES,
 } from '@/lib/validate'
 
+function debugLog(hypothesisId, location, message, data = {}, runId = 'run1') {
+  // #region agent log
+  fetch('http://127.0.0.1:7472/ingest/ba9f8741-d7fb-4662-bc8c-46b1670a2381', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'e4d355' },
+    body: JSON.stringify({
+      sessionId: 'e4d355',
+      runId,
+      hypothesisId,
+      location,
+      message,
+      data,
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {})
+  // #endregion
+}
+
+const stripe = process.env.STRIPE_SECRET_KEY 
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' }) 
+  : null;
+
 // API route per creare una prenotazione.
 // Gira lato server per leggere i cookie httpOnly della sessione.
 export async function POST(request) {
   try {
+    debugLog('H5', 'app/api/book/route.js:POST:entry', 'book api entry', {
+      hasStripeSecret: Boolean(process.env.STRIPE_SECRET_KEY),
+      hasSiteUrl: Boolean(process.env.NEXT_PUBLIC_SITE_URL),
+    })
     // 1. Rate limit: max 10 prenotazioni/minuto per IP.
     const limited = enforceRateLimit(request, {
       prefix: 'book',
@@ -69,9 +96,16 @@ export async function POST(request) {
       )
     }
 
-    // 5. Insert. Il trigger enforce_booking_limit + l'indice unique
-    //    bookings_one_confirmed_per_stall fanno da doppia garanzia
-    //    contro race condition e doppie prenotazioni.
+    // 5. Ottieni info sui prezzi (stall o event)
+    const { data: stallData } = await supabase
+      .from('stalls_with_status')
+      .select('price, default_price, event_title, label')
+      .eq('id', stall_id)
+      .single()
+
+    const amountToPay = stallData?.price || stallData?.default_price || 35.00
+
+    // 6. Insert in status pending
     const { data, error } = await supabase
       .from('bookings')
       .insert({
@@ -83,15 +117,75 @@ export async function POST(request) {
         vendor_email: vendor.email,
         goods_type,
         notes:        notes || null,
-        status:       'confirmed',
+        status:       'pending',
       })
       .select()
       .single()
+
+    debugLog('H5', 'app/api/book/route.js:POST:booking_insert_result', 'booking insert result', {
+      hasInsertError: Boolean(error),
+      insertErrorCode: error?.code || null,
+      bookingId: data?.id || null,
+    })
 
     if (error) {
       return NextResponse.json(
         { error: error.code || 'insert_failed', message: error.message },
         { status: 400 }
+      )
+    }
+
+    // 7. Crea sessione Stripe.
+    // Se Stripe fallisce (network, invalid key, ecc.) dobbiamo annullare il
+    // booking 'pending' appena inserito: altrimenti il posteggio resta
+    // bloccato senza una sessione di checkout valida, finche' il GC dei
+    // pending non lo libera (15 min). Meglio liberare subito.
+    if (!stripe) {
+      debugLog('H5', 'app/api/book/route.js:POST:missing_stripe_secret', 'missing stripe secret before checkout')
+      await rollbackPendingBooking(supabase, data.id)
+      throw new Error('STRIPE_SECRET_KEY non configurata sul server')
+    }
+    let session
+    try {
+      session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: [
+          {
+            price_data: {
+              currency: 'eur',
+              product_data: {
+                name: `Prenotazione posteggio ${stallData?.label} - ${stallData?.event_title}`,
+              },
+              unit_amount: Math.round(amountToPay * 100),
+            },
+            quantity: 1,
+          },
+        ],
+        mode: 'payment',
+        success_url: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/prenotato/${data.id}?success=true`,
+        cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/evento/${event_id}?canceled=true`,
+        metadata: {
+          booking_id: data.id,
+          stall_id: stall_id,
+          event_id: event_id
+        }
+      })
+      debugLog('H5', 'app/api/book/route.js:POST:checkout_created', 'stripe checkout created', {
+        bookingId: data.id,
+        hasCheckoutUrl: Boolean(session?.url),
+        checkoutSessionId: session?.id || null,
+      })
+    } catch (stripeErr) {
+      safeLogError('[api/book] stripe checkout session create failed', stripeErr)
+      debugLog('H5', 'app/api/book/route.js:POST:checkout_failed', 'stripe checkout create failed', {
+        bookingId: data.id,
+        errorCode: stripeErr?.code || null,
+        errorName: stripeErr?.name || null,
+      })
+      await rollbackPendingBooking(supabase, data.id)
+      return NextResponse.json(
+        { error: 'stripe_failed', message: 'Errore nel creare la sessione di pagamento. Riprova.' },
+        { status: 502 }
       )
     }
 
@@ -110,12 +204,27 @@ export async function POST(request) {
       // non e' fatale per la prenotazione appena creata.
     }
 
-    return NextResponse.json({ data })
+    return NextResponse.json({ data, checkoutUrl: session.url })
   } catch (err) {
     safeLogError('[api/book] unexpected error', err)
     return NextResponse.json(
       { error: 'unexpected', message: 'Errore del server.' },
       { status: 500 }
     )
+  }
+}
+
+// Cleanup di un booking pending quando il flusso Stripe fallisce subito dopo
+// l'insert. Best effort: se anche questo update fallisce, sara' il GC dei
+// pending a liberare il posteggio (entro 15 min dal pg_cron).
+async function rollbackPendingBooking(supabase, bookingId) {
+  try {
+    await supabase
+      .from('bookings')
+      .update({ status: 'cancelled' })
+      .eq('id', bookingId)
+      .eq('status', 'pending')
+  } catch (rollbackErr) {
+    safeLogError('[api/book] rollback pending booking failed', rollbackErr)
   }
 }
