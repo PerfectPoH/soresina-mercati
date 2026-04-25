@@ -74,8 +74,10 @@ export async function middleware(request) {
 }
 
 export const config = {
-  // Matcher che copre admin + API (per rate limit e security headers su tutto).
-  // Per ora il middleware fa solo auth+https; i security headers sono in
-  // next.config.js e vengono applicati globalmente.
-  matcher: ['/admin/:path*'],
+  // Il middleware deve girare su (quasi) tutte le richieste per applicare:
+  //   1. Redirect HTTP -> HTTPS in produzione (a tutto il sito, non solo /admin)
+  //   2. Auth check su /admin/*
+  // Escludiamo asset statici di Next (_next/static, _next/image), favicon e
+  // file immagine: lì il middleware non serve e farlo girare costa CPU.
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
 }

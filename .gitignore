@@ -55,3 +55,23 @@ Thumbs.db
 # ---------- TypeScript ----------
 *.tsbuildinfo
 next-env.d.ts
+
+# ---------- Credenziali locali (CRITICO: MAI committare) ----------
+# File con email/password admin di prod e staging, anon key, ecc.
+# Vive solo sul tuo PC, NON deve mai finire su GitHub.
+CREDENZIALI.md
+credenziali.md
+.credentials.local
+*.credentials
+
+# ---------- Supabase CLI ----------
+# File temporanei della Supabase CLI (BUG-011).
+supabase/.temp/
+
+# ---------- Obsidian vault ----------
+# Configurazione locale di Obsidian (workspace, plugin config).
+# I file plugin contengono spesso API keys / TLS certs (es. obsidian-local-rest-api).
+# I .md del vault SONO committati (cervello condiviso degli agenti),
+# la sotto-cartella .obsidian no (BUG-007).
+vault/.obsidian/
+vault/Senza nome*.canvas
