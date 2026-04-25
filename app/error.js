@@ -5,6 +5,7 @@
 // automaticamente attorno alle route.
 // Ref: https://nextjs.org/docs/app/api-reference/file-conventions/error
 import { useEffect } from 'react'
+import * as Sentry from '@sentry/nextjs'
 
 export default function GlobalError({ error, reset }) {
   useEffect(() => {
@@ -12,6 +13,9 @@ export default function GlobalError({ error, reset }) {
     if (process.env.NODE_ENV === 'development') {
       console.error('[app error]', error)
     }
+    // Sentry: cattura l'errore se configurato (DSN presente).
+    // Sentry.captureException e' safe no-op se non inizializzato.
+    Sentry.captureException(error)
   }, [error])
 
   return (

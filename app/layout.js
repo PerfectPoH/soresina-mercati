@@ -4,6 +4,7 @@ import CookieBanner from '@/components/CookieBanner'
 import { ToastProvider } from '@/components/ToastProvider'
 import Link from 'next/link'
 import { Inter, Fraunces } from 'next/font/google'
+import { Analytics } from '@vercel/analytics/react'
 
 // Inter come font di sistema per tutto il body.
 // next/font scarica il font self-hosted in build time (zero richieste a
@@ -155,6 +156,10 @@ export default function RootLayout({ children }) {
           </footer>
           <CookieBanner />
         </ToastProvider>
+        {/* Vercel Analytics: zero-config, cookie-less, GDPR-friendly.
+            Attivo solo su deploy Vercel in produzione (NODE_ENV=production +
+            dominio *.vercel.app o custom). In dev locale non invia nulla. */}
+        <Analytics />
       </body>
     </html>
   )
