@@ -46,7 +46,7 @@ Qui verranno segnalati automaticamente dagli agenti eventuali issue noti o debit
 - **Mancanti**: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_APP_URL`, `SUPABASE_SERVICE_ROLE_KEY` (tutte assenti su entrambi gli scope Production e Preview)
 - **Conseguenza**: anche fixati i §1-3, il flusso checkout fallisce a runtime (throw all'avvio del modulo `book/route.js`)
 - **Fix proposto**: vedi [[Plan-Stripe-Recovery]] §3.2
-- **Stato**: in attesa di doppia approvazione
+- **Stato**: ✅ RISOLTO (parziale) per **Preview**. `STRIPE_SECRET_KEY` (test), `STRIPE_WEBHOOK_SECRET` (test), `SUPABASE_SERVICE_ROLE_KEY` (staging), `SENTRY_AUTH_TOKEN` configurati su Vercel via API. `NEXT_PUBLIC_APP_URL` non più necessario (codice migrato a `NEXT_PUBLIC_SITE_URL` esistente). **In attesa per Production**: STRIPE_SECRET_KEY live + STRIPE_WEBHOOK_SECRET live (richiedono onboarding Stripe live + Partita IVA Pro Loco). `SUPABASE_SERVICE_ROLE_KEY` su Production già configurato. Smoke test in corso su `https://soresina-mercati-git-staging-...vercel.app`.
 
 ### BUG-005 — Possibile mismatch schema: webhook Stripe dipende da `stripe_events_seen` non presente nello schema unificato
 - **Aperto da**: Codex 5.3 (check statico 2026-04-25)
@@ -112,7 +112,7 @@ Qui verranno segnalati automaticamente dagli agenti eventuali issue noti o debit
 - **Sintomo**: in `next.config.js` riga 79, il plugin Sentry usa `dryRun: !process.env.SENTRY_AUTH_TOKEN`. Senza il token, i source map non vengono caricati su Sentry → gli stack trace in produzione mostrano codice minificato, rendendo difficile il debugging di errori reali.
 - **Conseguenza**: Sentry cattura gli errori correttamente, ma non riesce a mappare la riga/colonna al sorgente originale.
 - **Fix proposto**: Opus aggiunge `SENTRY_AUTH_TOKEN` come env su Vercel (Production + Preview). Il token si ottiene da `https://sentry.io/settings/account/api/auth-tokens/`.
-- **Stato**: aperto, delegato a Opus con piano corrente
+- **Stato**: ✅ RISOLTO. Token `sntryu_...` configurato su Vercel via API per Production+Preview. Effettivo dal prossimo build (commit `f2cd9eb` triggera redeploy).
 
 ## Debito tecnico (non bloccante)
 
