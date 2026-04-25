@@ -52,6 +52,14 @@ Thumbs.db
 # ---------- Vercel ----------
 .vercel
 
+# ---------- Credenziali locali (CRITICO: MAI committare) ----------
+# File con email/password admin di prod e staging, anon key, ecc.
+# Vive solo sul tuo PC, NON deve mai finire su GitHub.
+CREDENZIALI.md
+credenziali.md
+.credentials.local
+*.credentials
+
 # ---------- TypeScript ----------
 *.tsbuildinfo
 next-env.d.ts
