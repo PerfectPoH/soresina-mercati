@@ -68,6 +68,11 @@ credenziali.md
 # File temporanei della Supabase CLI (BUG-011).
 supabase/.temp/
 
+# ---------- Cursor / Codex agent log ----------
+# Log e session di Codex 5.3 / Cursor IDE: instrumentation locale,
+# non devono finire nel repo (vedi BUG-014, BUG-027 instrumentation cleanup).
+.cursor/
+
 # ---------- Obsidian vault ----------
 # Configurazione locale di Obsidian (workspace, plugin config).
 # I file plugin contengono spesso API keys / TLS certs (es. obsidian-local-rest-api).
