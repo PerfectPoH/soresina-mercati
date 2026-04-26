@@ -420,6 +420,12 @@ select
   s.latitude,
   s.longitude,
   s.created_at,
+  -- Aggiunti dalla migration 15: serve a /api/book per calcolare amountToPay
+  -- e per popolare il line item Stripe Checkout. Senza, PostgREST tornava
+  -- errore silenzioso e l'app cadeva sul fallback 35 EUR (BUG-026).
+  e.title           as event_title,
+  e.date            as event_date,
+  e.price_per_stall as default_price,
   case
     when s.blocked then 'blocked'
     when b_confirmed.id is not null then 'booked'
@@ -431,6 +437,7 @@ select
   b_confirmed.goods_type,
   b_confirmed.user_id     as booked_by_user
 from stalls s
+  join events e on e.id = s.event_id
   left join lateral (
     select id, vendor_name, goods_type, user_id
     from bookings

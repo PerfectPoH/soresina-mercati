@@ -3,6 +3,17 @@ import { ImageResponse } from 'next/og'
 // Immagine dinamica per link preview (WhatsApp, Telegram, Facebook, Twitter).
 // Next.js la renderizza a 1200x630 tramite @vercel/og.
 // Path finale: /opengraph-image (esposto automaticamente da App Router).
+//
+// BUG-027: forziamo dynamic + runtime nodejs per evitare il prerender
+// statico al build. Su Windows local + @vercel/og c'e' un bug noto in
+// `fileURLToPath(import.meta.url)` durante il prerender che fa fallire
+// la build con `TypeError: Invalid URL`. Skippando il prerender
+// (dynamic = 'force-dynamic') l'immagine viene generata on-request,
+// e in produzione (Vercel) il flusso e' identico ma in un ambiente
+// dove import.meta.url e' valido.
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 export const size = { width: 1200, height: 630 }
 export const contentType = 'image/png'
 export const alt = 'Mercati Soresina — prenota il tuo posteggio'
