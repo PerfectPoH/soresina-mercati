@@ -36,9 +36,19 @@ export async function DELETE(request, { params }) {
     const auth = await requireAdmin(supabase)
     if (auth.error) return auth.error
 
-    const { error } = await supabase.from('events').delete().eq('id', params.id)
+    // BUG-016: select('id') per verificare quante righe sono state cancellate.
+    // Se RLS blocca o ID non esiste, data e' [] e dobbiamo rispondere 404
+    // anziche' fingere un success silenzioso.
+    const { data, error } = await supabase
+      .from('events')
+      .delete()
+      .eq('id', params.id)
+      .select('id')
     if (error) {
       return NextResponse.json({ error: error.code || 'delete_failed', message: error.message }, { status: 400 })
+    }
+    if (!data || data.length === 0) {
+      return NextResponse.json({ error: 'not_found', message: 'Evento non trovato o non autorizzato.' }, { status: 404 })
     }
     try {
       revalidatePath('/')
@@ -109,15 +119,32 @@ export async function PATCH(request, { params }) {
     // Centro + zoom della mappa satellite. Impostati dall'admin via
     // "Centra mappa qui" nel geo-editor oppure modificati in bulk dalla
     // dashboard admin. Range globali (lat ±90, lng ±180, zoom 1-22).
-    if (body.map_lat !== undefined) {
-      const r = validateNumber(body.map_lat, { field: 'Latitudine mappa', min: -90, max: 90 })
-      if (!r.ok) return NextResponse.json({ error: 'invalid_input', message: r.error }, { status: 400 })
-      update.map_lat = r.value
+    //
+    // BUG-017: lat e lng devono essere aggiornate insieme (stesso pattern di
+    // stalls.latitude/longitude). Un evento con solo lat o solo lng e' geo
+    // incoerente. Accettiamo: (a) entrambe valide, (b) entrambe null per
+    // resettare, oppure (c) nessuna delle due nel body. Mai una sola.
+    const hasLat = body.map_lat !== undefined
+    const hasLng = body.map_lng !== undefined
+    if (hasLat !== hasLng) {
+      return NextResponse.json(
+        { error: 'invalid_input', message: 'map_lat e map_lng devono essere aggiornate insieme.' },
+        { status: 400 }
+      )
     }
-    if (body.map_lng !== undefined) {
-      const r = validateNumber(body.map_lng, { field: 'Longitudine mappa', min: -180, max: 180 })
-      if (!r.ok) return NextResponse.json({ error: 'invalid_input', message: r.error }, { status: 400 })
-      update.map_lng = r.value
+    if (hasLat && hasLng) {
+      // Entrambi null = reset coordinate
+      if (body.map_lat === null && body.map_lng === null) {
+        update.map_lat = null
+        update.map_lng = null
+      } else {
+        const rLat = validateNumber(body.map_lat, { field: 'Latitudine mappa', min: -90, max: 90 })
+        if (!rLat.ok) return NextResponse.json({ error: 'invalid_input', message: rLat.error }, { status: 400 })
+        const rLng = validateNumber(body.map_lng, { field: 'Longitudine mappa', min: -180, max: 180 })
+        if (!rLng.ok) return NextResponse.json({ error: 'invalid_input', message: rLng.error }, { status: 400 })
+        update.map_lat = rLat.value
+        update.map_lng = rLng.value
+      }
     }
     if (body.map_zoom !== undefined) {
       const r = validateInt(body.map_zoom, { field: 'Zoom mappa', min: 1, max: 22 })
@@ -129,15 +156,20 @@ export async function PATCH(request, { params }) {
       return NextResponse.json({ error: 'no_changes', message: 'Nessun campo da aggiornare.' }, { status: 400 })
     }
 
+    // BUG-016: usiamo .select().maybeSingle() per distinguere "non trovato"
+    // (RLS o ID inesistente) da "errore". .single() farebbe esplodere su 0 row.
     const { data, error } = await supabase
       .from('events')
       .update(update)
       .eq('id', params.id)
       .select()
-      .single()
+      .maybeSingle()
 
     if (error) {
       return NextResponse.json({ error: error.code || 'update_failed', message: error.message }, { status: 400 })
+    }
+    if (!data) {
+      return NextResponse.json({ error: 'not_found', message: 'Evento non trovato o non autorizzato.' }, { status: 404 })
     }
     // Edit o archiviazione evento: invalida home (lista mercati attivi),
     // dashboard admin (lista con filtri), e la pagina evento stessa.

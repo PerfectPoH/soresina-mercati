@@ -96,7 +96,7 @@ Qui verranno segnalati automaticamente dagli agenti eventuali issue noti o debit
 - **Conseguenza**: il nuovo utente staging non completa correttamente il flusso di registrazione sul sito deployato.
 - **Fix proposto**: verificare `SITE_URL`/redirect URL in Supabase Auth per il progetto staging e l'uso di fallback `localhost` lato app/env; allineare callback e allowlist URL al dominio staging.
 - **Evidenza**: bug riprodotto da utente su staging.
-- **Stato**: aperto (da validare con trace runtime e log redirect URL generato).
+- **Stato**: ✅ RISOLTO. Salandra ha confermato la correzione del SITE_URL nel pannello Supabase Auth per il progetto staging. Il link di conferma ora punta correttamente al dominio staging.
 
 ### BUG-011 — `supabase/.temp/` non nel `.gitignore`
 - **Aperto da**: Antigravity (analisi 2026-04-25)
@@ -122,6 +122,42 @@ Qui verranno segnalati automaticamente dagli agenti eventuali issue noti o debit
 - **Conseguenza**: Sentry cattura gli errori correttamente, ma non riesce a mappare la riga/colonna al sorgente originale.
 - **Fix proposto**: Opus aggiunge `SENTRY_AUTH_TOKEN` come env su Vercel (Production + Preview). Il token si ottiene da `https://sentry.io/settings/account/api/auth-tokens/`.
 - **Stato**: ✅ RISOLTO. Token `sntryu_...` configurato su Vercel via API per Production+Preview. Effettivo dal prossimo build (commit `f2cd9eb` triggera redeploy).
+
+### BUG-014 — `debugLog()` hardcoded con sessione errata in route Stripe
+- **Aperto da**: Codex 5.3 (audit statico 2026-04-25)
+- **Severità**: 🟡 MEDIA (observability + rischio leak logging interno)
+- **Sintomo**: in `app/api/book/route.js` e `app/api/webhooks/stripe/route.js` il `debugLog()` invia sempre `sessionId: 'e4d355'` e header `X-Debug-Session-Id: e4d355` hardcoded.
+- **Conseguenza**: i log non seguono la sessione debug attiva, finiscono su stream sbagliato, e se lasciati in produzione aggiungono chiamate HTTP inutili su ogni request (book/webhook).
+- **Fix proposto**: rimuovere l'instrumentation temporanea dal codice applicativo o vincolarla con flag esplicito `DEBUG_MODE` + session id dinamica.
+- **Evidenza**: lettura diretta delle route API (`book` e `webhooks/stripe`) nel branch corrente.
+- **Stato**: ✅ RISOLTO. `debugLog()` ora è no-op se `NODE_ENV === 'production'` o se `AGENT_DEBUG_INGEST_URL` non è settato. Session id letto da `AGENT_DEBUG_SESSION_ID` (default `'local'`). URL e session id non più hardcoded. Codex (o qualsiasi agente) può attivare l'instrumentation in dev locale settando le 2 env, senza impattare prod/staging.
+
+### BUG-015 — Prezzo `0` non supportato nel checkout (`|| 35.00`)
+- **Aperto da**: Codex 5.3 (audit statico 2026-04-25)
+- **Severità**: 🟠 ALTA (errore di business logic)
+- **Sintomo**: in `app/api/book/route.js` il totale viene calcolato con `stallData?.price || stallData?.default_price || 35.00`.
+- **Conseguenza**: se un evento/posteggio e' volutamente gratuito (`price = 0`), il codice lo considera falsy e applica fallback a 35 EUR. Checkout con importo sbagliato e contestazioni utente.
+- **Fix proposto**: sostituire con nullish coalescing (`??`) e validazione esplicita del range.
+- **Evidenza**: analisi del path di calcolo importo nella route `/api/book`.
+- **Stato**: ✅ RISOLTO. `||` sostituito con `??`. In più, gestione esplicita del caso `amountToPay === 0`: salta Stripe Checkout (che non accetta unit_amount=0) e conferma direttamente il booking come gratuito. Frontend già compatibile (`BookingForm.jsx` controlla `if (checkoutUrl)` prima del redirect).
+
+### BUG-016 — DELETE/PATCH restituiscono `success:true` anche quando non toccano righe
+- **Aperto da**: Codex 5.3 (audit statico 2026-04-25)
+- **Severità**: 🟠 ALTA (silent failure lato API/UI)
+- **Sintomo**: endpoint come `app/api/bookings/[id]/route.js` (DELETE), `app/api/waitlist/[id]/route.js` (DELETE), `app/api/events/[id]/route.js` (DELETE) non verificano quante righe sono state realmente aggiornate/cancellate.
+- **Conseguenza**: con ID inesistente o bloccato da RLS la API puo' rispondere `200 { success: true }`, mascherando l'errore e lasciando UI/stato incoerenti.
+- **Fix proposto**: usare `.select('id')` (o count) dopo update/delete e ritornare `404/403` quando rows = 0.
+- **Evidenza**: path API sopra non controllano `data.length`/`count` nel risultato mutazione.
+- **Stato**: ✅ RISOLTO. Aggiunto `.select('id')` sulle 3 route (events DELETE+PATCH, bookings DELETE, waitlist DELETE) con check `data.length === 0` → 404 "non trovato o non autorizzato". `.maybeSingle()` per PATCH events per evitare errore su 0 rows.
+
+### BUG-017 — `PATCH /api/events/[id]` accetta coordinate mappa parziali
+- **Aperto da**: Codex 5.3 (audit statico 2026-04-25)
+- **Severità**: 🟡 MEDIA (incoerenza dati)
+- **Sintomo**: in `app/api/events/[id]/route.js` i campi `map_lat` e `map_lng` sono validati in modo indipendente; e' possibile aggiornare solo uno dei due.
+- **Conseguenza**: evento con centro mappa incompleto (`lat` senza `lng` o viceversa), con possibili glitch nel rendering satellite/editor.
+- **Fix proposto**: imporre aggiornamento atomico (`map_lat`+`map_lng` insieme, oppure entrambi null) come gia' fatto su `stalls`.
+- **Evidenza**: validazioni separate senza check di coppia nel ramo PATCH eventi.
+- **Stato**: ✅ RISOLTO. Validazione di coppia: se uno solo dei due (`map_lat`/`map_lng`) è nel body → 400 "devono essere aggiornate insieme". Accettiamo (a) entrambi numeri validi, (b) entrambi `null` (reset), oppure (c) nessuno dei due (no-op).
 
 ## Debito tecnico (non bloccante)
 

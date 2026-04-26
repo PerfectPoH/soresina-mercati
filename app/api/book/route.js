@@ -12,13 +12,18 @@ import {
   GOODS_TYPES,
 } from '@/lib/validate'
 
+// BUG-014: agent debug instrumentation. La funzione e' un no-op per default.
+// Si attiva solo in dev locale settando AGENT_DEBUG_INGEST_URL nell'env (con
+// session id generata a runtime). Cosi' non ci sono fetch a localhost da prod.
 function debugLog(hypothesisId, location, message, data = {}, runId = 'run1') {
-  // #region agent log
-  fetch('http://127.0.0.1:7472/ingest/ba9f8741-d7fb-4662-bc8c-46b1670a2381', {
+  if (process.env.NODE_ENV === 'production') return
+  const url = process.env.AGENT_DEBUG_INGEST_URL
+  if (!url) return
+  fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'e4d355' },
+    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': process.env.AGENT_DEBUG_SESSION_ID || 'local' },
     body: JSON.stringify({
-      sessionId: 'e4d355',
+      sessionId: process.env.AGENT_DEBUG_SESSION_ID || 'local',
       runId,
       hypothesisId,
       location,
@@ -27,7 +32,6 @@ function debugLog(hypothesisId, location, message, data = {}, runId = 'run1') {
       timestamp: Date.now(),
     }),
   }).catch(() => {})
-  // #endregion
 }
 
 const stripe = process.env.STRIPE_SECRET_KEY 
@@ -103,7 +107,10 @@ export async function POST(request) {
       .eq('id', stall_id)
       .single()
 
-    const amountToPay = stallData?.price || stallData?.default_price || 35.00
+    // BUG-015: nullish coalescing per supportare prezzo 0 (eventi gratuiti).
+    // `||` considera 0 come falsy e ricadrebbe sui default, addebitando soldi
+    // a chi ha esplicitamente impostato un mercato gratuito.
+    const amountToPay = stallData?.price ?? stallData?.default_price ?? 35.00
 
     // 6. Insert in status pending
     const { data, error } = await supabase
@@ -135,7 +142,32 @@ export async function POST(request) {
       )
     }
 
-    // 7. Crea sessione Stripe.
+    // 7. Caso eventi gratuiti (BUG-015 follow-up): se amountToPay === 0
+    // saltiamo Stripe e confermiamo subito. Stripe Checkout non accetta
+    // unit_amount=0 e non avrebbe senso pagare 0 EUR.
+    if (amountToPay === 0) {
+      const { error: confirmErr } = await supabase
+        .from('bookings')
+        .update({ status: 'confirmed' })
+        .eq('id', data.id)
+        .eq('status', 'pending')
+      if (confirmErr) {
+        await rollbackPendingBooking(supabase, data.id)
+        safeLogError('[api/book] free booking confirm failed', confirmErr)
+        return NextResponse.json(
+          { error: 'confirm_failed', message: 'Errore confermando la prenotazione gratuita.' },
+          { status: 500 }
+        )
+      }
+      try {
+        revalidatePath(`/evento/${event_id}`)
+        revalidatePath('/profilo')
+        revalidatePath('/admin')
+      } catch (_) {}
+      return NextResponse.json({ data: { ...data, status: 'confirmed' }, checkoutUrl: null })
+    }
+
+    // 8. Crea sessione Stripe.
     // Se Stripe fallisce (network, invalid key, ecc.) dobbiamo annullare il
     // booking 'pending' appena inserito: altrimenti il posteggio resta
     // bloccato senza una sessione di checkout valida, finche' il GC dei

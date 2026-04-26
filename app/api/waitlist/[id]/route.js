@@ -24,16 +24,26 @@ export async function DELETE(request, { params }) {
       )
     }
 
-    // La RLS consente la DELETE solo al proprietario o all'admin
-    const { error } = await supabase
+    // La RLS consente la DELETE solo al proprietario o all'admin.
+    // BUG-016: select('id') per distinguere "non autorizzato/non trovato"
+    // da "success silenzioso". Senza, un utente che cerca di cancellare
+    // l'iscrizione di qualcun altro vede success ma in DB non cambia nulla.
+    const { data, error } = await supabase
       .from('waitlist')
       .delete()
       .eq('id', params.id)
+      .select('id')
 
     if (error) {
       return NextResponse.json(
         { error: error.code || 'delete_failed', message: error.message },
         { status: 400 }
+      )
+    }
+    if (!data || data.length === 0) {
+      return NextResponse.json(
+        { error: 'not_found', message: 'Iscrizione non trovata o non autorizzato.' },
+        { status: 404 }
       )
     }
 

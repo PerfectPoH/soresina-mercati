@@ -47,15 +47,25 @@ export async function DELETE(request, { params }) {
       .eq('id', params.id)
       .maybeSingle()
 
-    const { error } = await supabase
+    // BUG-016: select('id') per verificare che l'update abbia toccato una
+    // riga reale. Senza questo, RLS o ID inesistente passerebbero come
+    // success silenzioso lasciando la UI in stato incoerente.
+    const { data: updated, error } = await supabase
       .from('bookings')
       .update({ status: 'cancelled' })
       .eq('id', params.id)
+      .select('id')
 
     if (error) {
       return NextResponse.json(
         { error: error.code || 'update_failed', message: error.message },
         { status: 400 }
+      )
+    }
+    if (!updated || updated.length === 0) {
+      return NextResponse.json(
+        { error: 'not_found', message: 'Prenotazione non trovata o non autorizzato.' },
+        { status: 404 }
       )
     }
 

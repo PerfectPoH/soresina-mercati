@@ -12,7 +12,7 @@ tags: [stato, completamento, roadmap, analisi]
 
 ---
 
-## 🎯 Completamento Globale: ~68%
+## 🎯 Completamento Globale: ~70%
 
 > Stima basata su analisi diretta del codice sorgente, incrocio con `Roadmap-Master.md` e verifica delle feature realmente presenti nel repo.
 
@@ -81,18 +81,19 @@ tags: [stato, completamento, roadmap, analisi]
 - [ ] **Schema.sql consolidato**: BUG-002, in attesa di Fase 2
 - [ ] **Cron GC pending bookings**: `pg_cron` da installare (BUG-006 fix parziale)
 
-### Pagamenti Stripe (~60% completa)
+### Pagamenti Stripe (~65% completa)
 - [x] **Checkout Session**: creazione in `book/route.js` con `status: pending`
 - [x] **Webhook**: ricezione `completed` + `expired` + async payment events
 - [x] **Idempotency**: tabella `stripe_events_seen` creata su prod e staging
 - [x] **Rollback booking**: se Stripe fallisce, booking viene cancellato
 - [x] **Lib supabase-admin**: client con service role per webhook
-- [ ] **Env vars Stripe su Vercel**: BUG-004, Opus in esecuzione
-- [ ] **Webhook endpoint registrato su Stripe**: BUG-004, Opus in esecuzione
-- [ ] **Smoke test end-to-end**: pendente dopo env vars
+- [x] **Env vars Stripe su Vercel staging**: configurate (test keys) — BUG-004 risolto per staging
+- [x] **Webhook endpoint Stripe staging**: registrato e funzionante
+- [x] **Smoke test end-to-end**: ✅ VALIDATO (booking `244dc29f` → `confirmed` in 39s)
+- [ ] **Live keys Stripe su Vercel Production**: richiede onboarding KYC Pro Loco
 - [ ] **Gestione rimborsi**: non implementata
 - [ ] **Ricevuta/fattura automatica**: non implementata
-- [ ] **Partita IVA Pro Loco su Stripe**: da configurare
+- [ ] **Partita IVA Pro Loco su Stripe**: da configurare con onboarding live
 
 ### GDPR & Legale (~70% completa)
 - [x] **Privacy policy**: `/privacy` presente
@@ -140,15 +141,18 @@ tags: [stato, completamento, roadmap, analisi]
 
 ## 🐛 Bug aperti post-fix Opus
 
-Dopo che Opus completa il piano corrente, rimarranno **zero bug critici**. I bug aperti saranno:
+**Zero bug critici aperti.** I bug aperti sono:
 
 | ID | Severità | Note |
 |----|----------|------|
-| TECH-DEBT-001 | 🟡 | Roadmap-Master da riallineare |
-| TECH-DEBT-002 | 🟡 | Componenti monolitici |
+| BUG-014 | 🟡 MEDIA | `debugLog()` hardcoded — da rimuovere (Codex) |
+| BUG-015 | 🟠 ALTA | Prezzo `0` trattato come falsy → fallback a 35€ |
+| BUG-016 | 🟠 ALTA | DELETE/PATCH non verificano righe toccate — silent fail |
+| BUG-017 | 🟡 MEDIA | Coordinate mappa parziali accettate in PATCH eventi |
+| TECH-DEBT-001 | ✅ | Roadmap-Master riallineata (25 apr sera) |
+| TECH-DEBT-002 | 🟡 | Componenti monolitici (post-consegna) |
 | TECH-DEBT-003 | 🟡 | Zero test automatizzati |
 | TECH-DEBT-004 | 🟡 | Rate limit in-memory (ok per ora) |
-| TECH-DEBT-005 | 🟡 | `debugLog()` Codex chiama localhost in prod |
 
 ---
 
@@ -159,27 +163,27 @@ Infrastruttura & DevOps   ██████████████████
 Frontend & UX             ████████████████░░░░░  85%
 Autenticazione & Admin    ████████████████████░  90%
 Database & Backend        ████████████████░░░░░  80%
-Pagamenti Stripe          ████████████░░░░░░░░░  60%
+Pagamenti Stripe          █████████████░░░░░░░░  65%
 GDPR & Legale             ██████████████░░░░░░░  70%
 Email & Notifiche         ██░░░░░░░░░░░░░░░░░░░  10%
 Test automatizzati        ░░░░░░░░░░░░░░░░░░░░░   0%
 ─────────────────────────────────────────────────
-TOTALE STIMATO            ████████████████░░░░░  ~68%
+TOTALE STIMATO            ████████████████░░░░░  ~70%
 ```
 
 ---
 
 ## 🚀 Piano per arrivare al 90%+ (consegna Pro Loco)
 
-1. **Opus**: completa i fix correnti (BUG-007/008/009/002/004/010/011/012) → **+5%**
-2. **Opus + Salandra**: Stripe smoke test end-to-end → **+5%**
-3. **Opus**: Email con Resend (conferma venditore + notifica admin) → **+8%**
+1. **Salandra**: Onboarding Stripe live (KYC + IBAN + P.IVA) → sblocca merge staging→main → **+5%**
+2. **Opus**: Email con Resend (conferma venditore + notifica admin) → **+8%**
+3. **Opus**: Fix BUG-015/016 (business logic critica) → **+2%**
 4. **Opus**: Checkbox GDPR nel form prenotazione → **+2%**
-5. **Salandra**: configurare dominio personalizzato → **+2%**
+5. **Salandra**: Configurare dominio personalizzato → **+2%**
 
-**Totale stimato post-sprint: ~90%** — pronto per consegna MVP alla Pro Loco.
+**Totale stimato post-sprint: ~89%** — pronto per consegna MVP alla Pro Loco.
 
-Il restante 10% è composto da nice-to-have (realtime, test E2E, refactor) che non bloccano la consegna.
+Il restante 11% è composto da: test E2E, realtime sync, refactor componenti, rimborsi (nice-to-have, non bloccanti).
 
 ---
 

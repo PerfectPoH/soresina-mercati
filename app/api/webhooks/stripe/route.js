@@ -6,13 +6,17 @@ import { safeLogError } from '@/lib/log'
 // Stripe SDK requires Node runtime (uses crypto/Buffer non disponibili in Edge).
 export const runtime = 'nodejs'
 
+// BUG-014: agent debug instrumentation. No-op per default. Si attiva solo
+// in dev locale con AGENT_DEBUG_INGEST_URL settato.
 function debugLog(hypothesisId, location, message, data = {}, runId = 'run1') {
-  // #region agent log
-  fetch('http://127.0.0.1:7472/ingest/ba9f8741-d7fb-4662-bc8c-46b1670a2381', {
+  if (process.env.NODE_ENV === 'production') return
+  const url = process.env.AGENT_DEBUG_INGEST_URL
+  if (!url) return
+  fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'e4d355' },
+    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': process.env.AGENT_DEBUG_SESSION_ID || 'local' },
     body: JSON.stringify({
-      sessionId: 'e4d355',
+      sessionId: process.env.AGENT_DEBUG_SESSION_ID || 'local',
       runId,
       hypothesisId,
       location,
@@ -21,7 +25,6 @@ function debugLog(hypothesisId, location, message, data = {}, runId = 'run1') {
       timestamp: Date.now(),
     }),
   }).catch(() => {})
-  // #endregion
 }
 
 // Stripe va inizializzato lazily: se la SECRET_KEY manca al build (es. preview
