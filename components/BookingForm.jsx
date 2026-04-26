@@ -4,17 +4,9 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Spinner from './Spinner'
-
-const GOODS_TYPES = [
-  'Abbigliamento',
-  'Alimentari',
-  'Artigianato',
-  'Fiori e piante',
-  'Casalinghi',
-  'Giocattoli',
-  'Elettronica',
-  'Altro',
-]
+// BUG-023: import GOODS_TYPES da lib/validate.js (unica fonte di verita'
+// backend+frontend). Prima era duplicato qui e in app/registrati/page.js.
+import { GOODS_TYPES } from '@/lib/validate'
 
 export default function BookingForm({
   stall,

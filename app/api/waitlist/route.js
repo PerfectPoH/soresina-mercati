@@ -38,6 +38,18 @@ export async function POST(request) {
       )
     }
 
+    // BUG-024: rate limit per-utente in aggiunta a quello per IP. Lo schema
+    // ha gia' un unique(event_id, user_id) che ferma duplicati semantici, ma
+    // un utente potrebbe comunque generare scrittura/log spam tentando piu'
+    // eventi. 5 iscrizioni/min per utente sono ampiamente sufficienti.
+    const userLimited = enforceRateLimit(request, {
+      prefix: 'waitlist-user',
+      limit: 5,
+      windowMs: 60_000,
+      keyExtra: user.id,
+    })
+    if (userLimited) return userLimited
+
     const { data: vendor } = await supabase
       .from('vendors')
       .select('name, phone, email')

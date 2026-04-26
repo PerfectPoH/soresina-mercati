@@ -100,17 +100,37 @@ export async function POST(request) {
       )
     }
 
-    // 5. Ottieni info sui prezzi (stall o event)
-    const { data: stallData } = await supabase
+    // 5. Ottieni info sui prezzi (stall o event).
+    // BUG-020: filtriamo SIA su id SIA su event_id per evitare che un client
+    // mandi (stall_id di evento A, event_id di evento B): senza il filtro
+    // event_id, la stall verrebbe trovata e si calcolerebbe il prezzo del
+    // suo evento "vero" mentre il booking verrebbe creato sull'event_id
+    // sbagliato. .maybeSingle() per non esplodere su 0 row.
+    const { data: stallData, error: stallErr } = await supabase
       .from('stalls_with_status')
-      .select('price, default_price, event_title, label')
+      .select('price, default_price, event_title, label, event_id')
       .eq('id', stall_id)
-      .single()
+      .eq('event_id', event_id)
+      .maybeSingle()
+
+    if (stallErr) {
+      safeLogError('[api/book] stall lookup failed', stallErr)
+      return NextResponse.json(
+        { error: 'stall_lookup_failed', message: 'Errore nel verificare il posteggio.' },
+        { status: 500 }
+      )
+    }
+    if (!stallData) {
+      return NextResponse.json(
+        { error: 'stall_not_found', message: 'Posteggio non trovato per questo evento.' },
+        { status: 404 }
+      )
+    }
 
     // BUG-015: nullish coalescing per supportare prezzo 0 (eventi gratuiti).
     // `||` considera 0 come falsy e ricadrebbe sui default, addebitando soldi
     // a chi ha esplicitamente impostato un mercato gratuito.
-    const amountToPay = stallData?.price ?? stallData?.default_price ?? 35.00
+    const amountToPay = stallData.price ?? stallData.default_price ?? 35.00
 
     // 6. Insert in status pending
     const { data, error } = await supabase

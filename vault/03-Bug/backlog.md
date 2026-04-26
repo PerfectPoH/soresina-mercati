@@ -1,6 +1,6 @@
 ---
 tipo: bug-tracker
-ultimo-aggiornamento: 2026-04-25
+ultimo-aggiornamento: 2026-04-26
 ---
 
 # Backlog dei Bug
@@ -179,3 +179,133 @@ Qui verranno segnalati automaticamente dagli agenti eventuali issue noti o debit
 - `lib/rate-limit.js` usa Map in memoria. Su Vercel serverless è frammentato per istanza.
 - Per il volume target (Pro Loco, ~50 prenotazioni/anno) accettabile.
 - Da migrare a Vercel KV / Upstash il giorno in cui si va multi-tenant.
+
+---
+
+## Bug aperti — Audit Antigravity 26 Aprile
+
+### BUG-018 — Pagina `/prenotato/[id]` accessibile da qualunque utente autenticato
+- **Aperto da**: Antigravity (audit statico 2026-04-26)
+- **Severità**: 🔴 CRITICA (information disclosure)
+- **Sintomo**: `app/prenotato/[id]/page.js` esegue la query `bookings` lasciando alla RLS tutta la responsabilità del filtraggio. Se la RLS policy `bookings` permette la lettura al proprietario O all'admin ma non verifica la `user_id` in modo stretto, qualsiasi utente autenticato che indovina/bruteforza un UUID può vedere nome, email, telefono, tipo merce e dati di pagamento altrui.
+- **Conseguenza**: GDPR Art. 5(1)(f) violazione di integrità. Esposizione di PII di terzi.
+- **Fix proposto**: aggiungere check esplicito lato server dopo la fetch: `if (booking.user_id !== user.id && vendor?.role !== 'admin') return notFound()`. Duplica il check RLS ma è la difesa in profondità corretta.
+- **Evidenza**: `page.js` riga 49 — restituisce `{ booking, user }` senza confrontare `booking.user_id === user.id`.
+- **Stato**: ✅ RISOLTO. Aggiunto check ownership esplicito in `app/prenotato/[id]/page.js`: se `booking.user_id !== user.id` AND ruolo non admin → `notFound()`. Defense-in-depth: la RLS protegge già al primo livello, ma se in futuro venisse rilassata l'app continua a essere safe.
+
+### BUG-019 — Singleton `supabase-admin` condiviso tra richieste serverless
+- **Aperto da**: Antigravity (audit statico 2026-04-26)
+- **Severità**: 🟠 ALTA (potenziale leak cross-request in edge cases)
+- **Sintomo**: `lib/supabase-admin.js` usa un singleton `_admin` a livello di modulo (`let _admin = null`). Su Vercel Serverless ogni istanza Lambda ha il proprio processo, quindi il singleton non è condiviso tra richieste diverse **normalmente**. Tuttavia in ambienti con worker long-lived (Vercel Edge runtime, self-hosted Node) o con warm reuse, il client potrebbe portare stato residuo da richieste precedenti.
+- **Conseguenza**: teoricamente bassa su Vercel standard deployment, ma aumenta il rischio con il service role key (ha accesso completo al DB bypassando RLS). Con warm Lambda il singleton persiste — se Supabase aggiunge internamente caching di sessione il rischio aumenta.
+- **Fix proposto**: creare il client admin fresh per richiesta (`createClient(...)` senza caching), oppure assicurarsi che `{ auth: { persistSession: false } }` sia sufficiente (già impostato — valutare se il fix è già sufficiente).
+- **Evidenza**: `lib/supabase-admin.js` righe 3-16.
+- **Stato**: ❎ CHIUSO come **NOT-A-BUG** (concordi con la contro-verifica Codex). `persistSession: false` + `autoRefreshToken: false` impediscono qualsiasi cache di sessione utente. Il client admin è "stateless" rispetto a `auth.uid()`. Il singleton accelera solo il warm Lambda evitando re-init di `createClient`. Nessun rischio identificato. Promosso a TECH-DEBT solo se in futuro si passa a Supabase Edge runtime con worker long-lived.
+
+### BUG-020 — `stallData` null causa `amountToPay = 35.00` silenzioso
+- **Aperto da**: Antigravity (audit statico 2026-04-26)
+- **Severità**: 🟠 ALTA (errore di business logic silenzioso)
+- **Sintomo**: in `app/api/book/route.js` riga 104-113, la query su `stalls_with_status` usa `.single()` senza gestire il caso in cui la stall non esiste o non è visibile. Se la query ritorna null/error (stall cancellata, event_id sbagliato, RLS), `stallData` è `undefined` e `amountToPay = undefined ?? undefined ?? 35.00` → fallback silenzioso a 35€.
+- **Conseguenza**: un utente con stall_id manomesso (non validato contro event_id reale) potrebbe creare booking a 35€ su stalli inesistenti, oppure stalli gratuite vengono addebitate 35€.
+- **Fix proposto**: (1) validare che `stallData` esista e che la stall appartenga all'`event_id` passato; (2) restituire 400 se manca. Aggiungere `.eq('event_id', event_id)` alla query stalls.
+- **Evidenza**: `book/route.js` righe 104-113. La query non filtra per `event_id`.
+- **Stato**: ✅ RISOLTO. Query su `stalls_with_status` ora filtra `.eq('id', stall_id).eq('event_id', event_id)` con `.maybeSingle()`. Se `stallData` è null → 404 `stall_not_found` immediato. Errore di lookup → 500 con `safeLogError`. Fallback `35.00` rimosso dal flusso (la query non può più ritornare valori vuoti senza far fallire la richiesta).
+
+### BUG-021 — Validazione password solo lato client (no server-side enforcement)
+- **Aperto da**: Antigravity (audit statico 2026-04-26)
+- **Severità**: 🟠 ALTA (security bypass)
+- **Sintomo**: `app/registrati/page.js` valida la password (min 10 char, maiuscole, minuscole, numeri) solo in JavaScript lato client. Un attaccante può chiamare direttamente l'API Supabase Auth (`supabase.auth.signUp`) con qualsiasi password senza passare dal form React.
+- **Conseguenza**: account con password debole (es. `password`) vengono creati bypassando i controlli UI.
+- **Fix proposto**: configurare la **Password Policy** nel pannello Supabase Auth (Settings > Auth > Password) con: minimum length 10, require uppercase, require numbers. Supabase supporta queste policy nativamente lato server — non serve codice applicativo.
+- **Evidenza**: `registrati/page.js` righe 55-75 — validazioni solo in `handleSubmit`.
+- **Stato**: ⏳ IN ATTESA DI SALANDRA (fix di configurazione UI, non esposto via Supabase MCP). **Action item**: apri https://app.supabase.com/project/ddqwutxocznggfmrzzkw/auth/policies (e idem per project staging `yctfshlwgouhppadptgy`), sezione "Password policy" → setta: Min length = 10, Require lowercase + uppercase + numbers + symbols. Save. Da quel momento Supabase respinge lato server qualsiasi signUp con password debole.
+
+### BUG-022 — `revalidatePath` eseguito prima del redirect Stripe (race condition UX)
+- **Aperto da**: Antigravity (audit statico 2026-04-26)
+- **Severità**: 🟡 MEDIA (glitch UX transitorio)
+- **Sintomo**: in `app/api/book/route.js` righe 230-237, `revalidatePath('/evento/:id')` viene chiamato dopo l'insert del booking ma **prima** che l'utente completi il pagamento Stripe. Se un secondo utente apre la pagina evento in quel momento, vedrà il posteggio come `pending` (bloccato) anche se il checkout non è ancora stato completato.
+- **Conseguenza**: falsi positivi nella mappa — posteggi che appaiono occupati per ~15 min se il primo utente abbandona il checkout (finché GC pg_cron non pulisce).
+- **Fix proposto**: spostare il `revalidatePath` nel webhook Stripe, dopo che il booking è confermato. Per i booking gratuiti (che saltano Stripe) il revalidate immediato è corretto.
+- **Evidenza**: `book/route.js` righe 230-239. Il revalidate precede `return NextResponse.json({ data, checkoutUrl: session.url })`.
+- **Stato**: ❎ CHIUSO come **NOT-A-BUG / scelta intenzionale** (concordi con la contro-verifica Codex). Il `revalidatePath` immediato è il **lock di inventario** del posteggio: durante i ~15min di pending, gli altri utenti devono vederlo bloccato per non duplicare la prenotazione. L'alternativa (revalidate solo dal webhook post-payment) creerebbe race condition: due utenti potrebbero entrambi avviare il checkout dello stesso posteggio. Il GC `pg_cron` ogni 5 min libera i pending abbandonati. Trade-off accettabile.
+
+### BUG-023 — `GOODS_TYPES` duplicato: frontend e backend desincronizzabili
+- **Aperto da**: Antigravity (audit statico 2026-04-26)
+- **Severità**: 🟡 MEDIA (tech debt / rischio manutenzione)
+- **Sintomo**: la lista `GOODS_TYPES` è definita sia in `lib/validate.js` (fonte di verità backend) sia in `components/BookingForm.jsx` (riga 8-17) e `app/registrati/page.js` (riga 8-17). Se si aggiunge un tipo in uno solo dei tre file, il backend rifiuterà il valore con `invalid_input` senza che l'UI lo segnali correttamente.
+- **Fix proposto**: esportare `GOODS_TYPES` da `lib/validate.js` e importarlo nei componenti client (possibile perché `lib/validate.js` non contiene import server-only). Unica fonte di verità.
+- **Evidenza**: 3 copie hardcoded dello stesso array.
+- **Stato**: ✅ RISOLTO. `GOODS_TYPES` ora importato da `@/lib/validate` in `components/BookingForm.jsx` e `app/registrati/page.js`. Le 2 copie locali rimosse. Verificato che `lib/validate.js` è puro JS senza import server-only (compatibile con bundle client).
+
+### BUG-024 — Lista d'attesa senza rate limit per-utente
+- **Aperto da**: Antigravity (audit statico 2026-04-26)
+- **Severità**: 🟡 MEDIA (abuse risk)
+- **Sintomo**: `app/api/waitlist/route.js` ha solo rate limit per IP (`limit: 10`). Non c'è un limite per-utente (`keyExtra: user.id`), a differenza di `app/api/book/route.js` che ha entrambi. Un utente autenticato da IP diversi (es. mobile + VPN) può iscriversi molte volte.
+- **Conseguenza**: inflate della lista d'attesa con iscrizioni duplicate dello stesso utente; l'admin vede una waitlist gonfiata. Peggio se il DB non ha unique constraint su `(user_id, event_id)`.
+- **Fix proposto**: aggiungere `enforceRateLimit` con `keyExtra: user.id` dopo il check auth. Verificare anche presence di unique constraint su `waitlist(user_id, event_id)`.
+- **Evidenza**: `waitlist/route.js` riga 18 — solo rate limit IP.
+- **Stato**: ✅ RISOLTO. Aggiunto `enforceRateLimit` con `prefix: 'waitlist-user'`, `limit: 5`, `keyExtra: user.id` dopo il check auth. Confermato che `schema.sql` ha già `unique (event_id, user_id)` su `waitlist`, quindi i duplicati semantici erano già bloccati: il rate limit per-utente serve solo come anti-spam.
+
+### BUG-025 — Pagina conferma mostra "Riceverai email" ma le email non esistono
+- **Aperto da**: Antigravity (audit statico 2026-04-26)
+- **Severità**: 🟡 BASSA (UX fuorviante)
+- **Sintomo**: `app/prenotato/[id]/page.js` riga 104 mostra il testo: "Il tuo posteggio è riservato. Riceverai anche una conferma via email." Le email di conferma (Resend) non sono ancora implementate — il sistema non manda nulla.
+- **Conseguenza**: l'utente attende una email che non arriverà mai, potrebbe pensare che la prenotazione sia andata male e riprovare.
+- **Fix proposto**: rimuovere la frase "Riceverai anche una conferma via email" fino a quando l'integrazione Resend non è attiva. O sostituirla con "Salva il codice prenotazione".
+- **Evidenza**: `prenotato/[id]/page.js` riga 104.
+- **Stato**: ✅ RISOLTO. Testo cambiato in "Il tuo posteggio è riservato. Salva il codice di prenotazione qui sotto." Quando implementeremo Resend, possiamo riaggiungere la promessa di email.
+
+---
+
+## Contro-verifica Codex 5.3 (26 Aprile) — per decisione Opus
+
+Questa sezione NON chiude automaticamente i bug Antigravity: serve come check incrociato.
+Decisione finale e piano operativo demandati a Opus.
+
+### Esito rapido
+
+- ✅ **Confermati come bug reali/prioritari**: **BUG-020**, **BUG-023**, **BUG-025**
+- ⚠️ **Dipende da configurazione esterna (non verificabile solo da repo)**: **BUG-021**
+- ❓ **Probabile falso positivo / severità sovrastimata**: **BUG-018**, **BUG-019**, **BUG-022**, **BUG-024 (parziale)**
+
+### Dettaglio per bug (018-025)
+
+#### BUG-018 — `/prenotato/[id]` accessibile ad altri utenti
+- **Contro-verifica Codex**: probabile falso positivo, ma hardening consigliato.
+- **Motivo**: nel codice non c'è check esplicito `booking.user_id === user.id`, però la RLS in `supabase/schema.sql` su `bookings` è `user_id = auth.uid() OR is_admin()`.
+- **Decisione proposta a Opus**: se vuole defense-in-depth, aggiungere comunque check server-side esplicito in `app/prenotato/[id]/page.js`.
+
+#### BUG-019 — singleton `supabase-admin`
+- **Contro-verifica Codex**: probabile falso positivo.
+- **Motivo**: `lib/supabase-admin.js` usa service role + `{ persistSession: false, autoRefreshToken: false }`; non emerge stato utente riusato cross-request.
+- **Decisione proposta a Opus**: trattare come tech-debt opzionale, non come bug bloccante.
+
+#### BUG-020 — `stallData` null / fallback importo
+- **Contro-verifica Codex**: bug reale.
+- **Motivo**: in `app/api/book/route.js` la query su `stalls_with_status` filtra solo `id` (non `event_id`) e non blocca esplicitamente il caso stall/event mismatch prima del flusso pagamento.
+- **Decisione proposta a Opus**: fix prioritario.
+
+#### BUG-021 — password policy solo client
+- **Contro-verifica Codex**: rischio reale, da confermare via dashboard.
+- **Motivo**: nel codice (`app/registrati/page.js`) la policy password è solo client-side. Enforcement server-side dipende da configurazione Supabase Auth.
+- **Decisione proposta a Opus**: verificare/imporre Password Policy su Supabase Auth (min length + uppercase + number).
+
+#### BUG-022 — `revalidatePath` prima del redirect Stripe
+- **Contro-verifica Codex**: più tradeoff UX che bug certo.
+- **Motivo**: mostrare temporaneamente `pending` prima di pagamento completato è coerente con lock di inventario; può essere scelta intenzionale.
+- **Decisione proposta a Opus**: valutare prodotto/UX, non security-critical.
+
+#### BUG-023 — `GOODS_TYPES` duplicato FE/BE
+- **Contro-verifica Codex**: bug/tech-debt reale.
+- **Motivo**: array duplicato in `lib/validate.js`, `components/BookingForm.jsx`, `app/registrati/page.js` con rischio desync.
+- **Decisione proposta a Opus**: estrarre fonte unica condivisa.
+
+#### BUG-024 — waitlist senza rate-limit per-utente
+- **Contro-verifica Codex**: parzialmente corretto, severità sovrastimata.
+- **Motivo**: manca rate-limit per-user in `app/api/waitlist/route.js`, ma `supabase/schema.sql` ha `unique (event_id, user_id)` quindi non è vero che lo stesso utente può iscriversi infinite volte allo stesso evento.
+- **Decisione proposta a Opus**: miglioramento anti-abuso utile, ma non critica come descritta.
+
+#### BUG-025 — testo email conferma non implementata
+- **Contro-verifica Codex**: bug UX reale.
+- **Motivo**: `app/prenotato/[id]/page.js` promette email di conferma non implementata nel flusso.
+- **Decisione proposta a Opus**: aggiornare copy subito o implementare invio email.

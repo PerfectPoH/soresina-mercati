@@ -4,17 +4,8 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createSupabaseBrowserClient } from '@/lib/supabase-browser'
-
-const GOODS_TYPES = [
-  'Abbigliamento',
-  'Alimentari',
-  'Artigianato',
-  'Fiori e piante',
-  'Casalinghi',
-  'Giocattoli',
-  'Elettronica',
-  'Altro',
-]
+// BUG-023: import da lib/validate.js (unica fonte di verita').
+import { GOODS_TYPES } from '@/lib/validate'
 
 export default function RegistratiPage() {
   const router = useRouter()

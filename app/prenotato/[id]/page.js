@@ -26,9 +26,10 @@ async function getBookingWithContext(bookingId) {
   const { data: { user } } = await supa.auth.getUser()
   if (!user) return { unauth: true }
 
-  // RLS consente: proprietario (user_id = auth.uid()) oppure admin.
-  // Usiamo una select con join logico sugli eventi/stalls per avere
-  // tutto in una query.
+  // BUG-018 (defense-in-depth): la RLS su `bookings` filtra gia'
+  // (user_id = auth.uid() OR is_admin()), ma se in futuro venisse rilassata
+  // o un bug di RLS la rendesse permissiva, qui verifichiamo esplicitamente
+  // l'ownership in app code. Pattern "belt and suspenders".
   const { data: booking, error } = await supa
     .from('bookings')
     .select(`
@@ -45,6 +46,20 @@ async function getBookingWithContext(bookingId) {
     return { notFound: true }
   }
   if (!booking) return { notFound: true }
+
+  // Check ownership esplicito: solo il proprietario o un admin possono
+  // vedere la pagina di conferma. Per un non-proprietario non-admin
+  // ritorniamo notFound (non 403) per non confermare l'esistenza dell'ID.
+  if (booking.user_id !== user.id) {
+    const { data: vendor } = await supa
+      .from('vendors')
+      .select('role')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (!vendor || vendor.role !== 'admin') {
+      return { notFound: true }
+    }
+  }
 
   return { booking, user }
 }
@@ -101,7 +116,7 @@ export default async function PrenotatoPage({ params }) {
         <p className={`text-sm ${isCancelled ? 'text-stone-500' : 'text-green-700'}`}>
           {isCancelled
             ? 'Questa prenotazione e\' stata annullata.'
-            : 'Il tuo posteggio e\' riservato. Riceverai anche una conferma via email.'}
+            : 'Il tuo posteggio e\' riservato. Salva il codice di prenotazione qui sotto.'}
         </p>
         <div className="mt-4 text-xs text-stone-400">
           Codice prenotazione: <span className="font-mono text-stone-600">{refCode}</span>
