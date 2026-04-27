@@ -4,12 +4,12 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 // Form unificato per creare/modificare un evento.
-// - Se `initialEvent` e' null: crea un nuovo evento (+ genera stalls)
-// - Se `initialEvent` e' presente: aggiorna l'evento (no generazione stalls)
-//
-// Le dimensioni della griglia (rows/cols) in modifica sono SOLA LETTURA:
-// cambiare rows/cols su un evento gia' creato richiederebbe di rigenerare
-// le bancarelle, invalidando le prenotazioni gia' presenti. Non lo facciamo.
+// - Se `initialEvent` e' null: crea un nuovo evento (+ genera stalls + copia
+//   posizioni dalla mappa dall'ultimo evento alla stessa location)
+// - Se `initialEvent` e' presente: aggiorna l'evento (puo' AUMENTARE rows/cols
+//   per aggiungere posteggi; le bancarelle esistenti e le prenotazioni
+//   restano invariate). DIMINUIRE rows/cols non e' supportato perche'
+//   distruggerebbe prenotazioni esistenti — l'API rifiuta.
 export default function EventForm({ initialEvent = null }) {
   const router = useRouter()
   const isEdit = !!initialEvent
@@ -55,6 +55,10 @@ export default function EventForm({ initialEvent = null }) {
             description:     form.description,
             date:            form.date,
             location:        form.location,
+            // BUG-031: ora si possono modificare rows/cols (solo aumentando).
+            // L'API rifiuta diminuzioni con messaggio esplicito.
+            rows:            Number(form.rows),
+            cols:            Number(form.cols),
             price_per_stall: Number(form.price_per_stall),
             image_url:       form.image_url?.trim() || '',
             active:          !!form.active,
@@ -234,8 +238,7 @@ export default function EventForm({ initialEvent = null }) {
                 value={form.rows}
                 onChange={e => set('rows', e.target.value)}
                 min="1" max="10"
-                disabled={isEdit}
-                className="w-full text-sm border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:border-amber-400 bg-white disabled:bg-stone-100 disabled:text-stone-400"
+                className="w-full text-sm border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:border-amber-400 bg-white"
               />
             </div>
             <div>
@@ -245,8 +248,7 @@ export default function EventForm({ initialEvent = null }) {
                 value={form.cols}
                 onChange={e => set('cols', e.target.value)}
                 min="1" max="20"
-                disabled={isEdit}
-                className="w-full text-sm border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:border-amber-400 bg-white disabled:bg-stone-100 disabled:text-stone-400"
+                className="w-full text-sm border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:border-amber-400 bg-white"
               />
             </div>
           </div>

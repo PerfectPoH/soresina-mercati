@@ -33,7 +33,7 @@ export default async function ModificaEventoPage({ params }) {
       <div className="mb-6">
         <h1 className="text-2xl font-medium text-stone-900">Modifica {event.title}</h1>
         <p className="text-stone-400 text-sm mt-1">
-          Le dimensioni della griglia (righe/colonne) non sono modificabili dopo la creazione.
+          Puoi <strong>aumentare</strong> righe e colonne per aggiungere posteggi (le posizioni sulla mappa vengono ereditate dall'ultimo evento alla stessa location). Diminuire righe/colonne non è supportato perché distruggerebbe le prenotazioni esistenti.
         </p>
       </div>
 

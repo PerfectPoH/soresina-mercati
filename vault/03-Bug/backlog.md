@@ -5,7 +5,7 @@ ultimo-aggiornamento: 2026-04-26
 
 # Backlog dei Bug
 
-> 🟢 **0 bug critici aperti.** BUG-026, BUG-027, BUG-028 chiusi nella sessione 2026-04-26 sera (Opus). Restano solo 4 tech-debt non bloccanti.
+> 🟢 **0 bug critici aperti.** BUG-029..033 + feature "template posizioni stalls" chiusi nella sessione 2026-04-26 notte (Opus). Restano solo 4 tech-debt non bloccanti.
 >
 > 📚 Storia completa di BUG-001 → BUG-025 (con cause, fix, motivazioni di chiusura) è in [[Bug-Risolti-Storico]] (in `_archive`).
 
@@ -14,6 +14,60 @@ ultimo-aggiornamento: 2026-04-26
 ## 🔴 Bug aperti
 
 *(nessuno)*
+
+---
+
+## 🆕 Bug risolti in questa sessione (26 Apr notte, Opus)
+
+### BUG-029 — Incasso stimato hardcoded a 35€/booking
+- **Sintomo**: dashboard admin mostrava "70€" per 2 prenotazioni da 3€ ciascuna.
+- **Causa**: `app/admin/page.js` riga 79: `bookings.length * 35` (hardcoded, prezzo fisso).
+- **Fix**: nuova funzione `calcolaIncasso(bookings)` che somma `stalls.price ?? events.price_per_stall` per ogni booking. Query estesa con `stalls(label, price), events(title, date, price_per_stall)`.
+- **Stato**: ✅ RISOLTO
+
+### BUG-030 — Limite 2 prenotazioni bypassabile via Stripe
+- **Sintomo**: utente con 2 prenotazioni confirmed iniziava un terzo checkout, **pagava** su Stripe, ma il booking restava `pending` per sempre (webhook silenziosamente bloccato).
+- **Causa**: trigger `enforce_booking_limit` contava solo `confirmed`. Insert di nuovo booking come `pending` passava → Stripe addebitava → webhook UPDATE pending→confirmed bloccato dal trigger (count=3) → silent failure → utente paga senza ricevere prenotazione.
+- **Fix**: migration `16_booking_limit_includes_pending`. Il trigger ora conta `confirmed + pending` escludendo l'id corrente. L'INSERT del 3° booking viene bloccato PRIMA del checkout Stripe → utente vede errore "Hai raggiunto il limite di 2 posteggi" senza nessun addebito.
+- **Stato**: ✅ RISOLTO su prod e staging.
+
+### BUG-031 — Numero slot evento non modificabile dopo creazione
+- **Sintomo**: campi righe/colonne disabilitati in modifica.
+- **Fix**: 
+  - `EventForm.jsx`: rimosso `disabled={isEdit}`, rows/cols editabili
+  - `app/api/events/[id]/route.js` PATCH: accetta `rows`/`cols`, valida solo aumento (diminuzione → 400 esplicito), chiama `generate_stalls()` per creare i nuovi posteggi (ON CONFLICT DO NOTHING preserva i vecchi)
+  - Dopo generate: chiama `copy_stall_positions_from_template()` per ereditare le coordinate dei nuovi posteggi dall'ultimo evento alla stessa location
+  - Pagina modifica: aggiornata nota di guidance
+- **Stato**: ✅ RISOLTO
+
+### BUG-032 — Profilo utente mostra solo conteggio prenotazioni
+- **Sintomo**: la pagina `/profilo` mostrava solo "Totali: N, Confermate: N" senza dettagli.
+- **Fix**: query estesa con `events(title, date, price_per_stall), stalls(label, price)`. UI nuova: lista ordinata per data, per ogni booking mostra evento + data + posteggio + prezzo + badge stato (Attiva / In attesa / Passata / Annullata). Click sulla prenotazione → pagina conferma `/prenotato/[id]`. Bottone "Richiedi cancellazione" per le attive/pending.
+- **Stato**: ✅ RISOLTO
+
+### BUG-033 — Cancellazione utente con flusso admin + rimborso Stripe
+- **Sintomo**: l'utente non aveva modo di richiedere annullamento; l'admin poteva cancellare ma senza rimborso.
+- **Fix**: flusso completo
+  - **DB**: migration `18_booking_cancellation_request` aggiunge colonne `cancellation_requested_at`, `cancellation_reason`, `stripe_session_id`, `stripe_payment_intent_id` su `bookings`. Funzione `request_booking_cancellation(uuid, text)` SECURITY DEFINER per check ownership + stato.
+  - **Webhook Stripe**: in `handleCheckoutCompleted` salva `stripe_session_id` e `stripe_payment_intent_id` quando conferma il booking.
+  - **API utente**: `POST /api/bookings/[id]/cancellation-request` con body `{ reason }` (opzionale, max 500 char). Rate limit per IP + per utente.
+  - **API admin**: `POST /api/admin/bookings/[id]/cancel` con body `{ refund: true|false }`. Se refund=true e c'è payment_intent → `stripe.refunds.create()`. Aggiorna status=cancelled. `DELETE` stesso path → rifiuta richiesta (clear `cancellation_requested_at`).
+  - **UI utente**: componente `RequestBookingCancellation` con form motivo + invio.
+  - **UI admin**: pagina `/admin/cancellazioni` con lista richieste pending + bottoni "Annulla + rimborsa" / "Annulla senza rimborso" / "Rifiuta richiesta". Badge contatore nel link dashboard.
+- **Stato**: ✅ RISOLTO. Da testare end-to-end su staging dopo prossima prenotazione + richiesta.
+
+---
+
+## 🛠️ Feature aggiunta: Template posizioni stalls satellitari
+
+Salandra ha richiesto: ogni volta che si crea un evento, le posizioni dei posteggi sulla mappa satellitare (lat/lng) vengono ereditate dall'ultimo evento alla stessa location, senza dover riposizionare manualmente.
+
+**Implementazione**:
+- **DB**: migration `17_copy_stall_positions_template`. Funzione `copy_stall_positions_from_template(p_event_id)` SECURITY DEFINER che cerca l'ultimo evento alla stessa location con stalls coordinate valorizzate, e copia per label match (A01, A02, ecc.). Non sovrascrive eventuali coordinate già impostate sul nuovo evento.
+- **POST `/api/events`**: dopo `generate_stalls`, chiama `copy_stall_positions_from_template`. Best-effort: se fallisce, l'evento è creato comunque.
+- **PATCH `/api/events/[id]`**: quando rows/cols aumentano, dopo `generate_stalls` chiama `copy_stall_positions_from_template` per i nuovi posteggi.
+
+**Effetto**: l'admin posiziona i posteggi UNA volta sulla mappa per la prima edizione; tutte le edizioni successive li trovano già piazzati.
 
 ---
 

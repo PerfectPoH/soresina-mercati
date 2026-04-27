@@ -101,7 +101,13 @@ create table if not exists bookings (
   status       text not null default 'confirmed'
     check (status in ('confirmed','cancelled','pending')),
   notes        text,
-  created_at   timestamptz default now()
+  -- Stripe (BUG-033 + smoke test)
+  stripe_session_id          text,
+  stripe_payment_intent_id   text,
+  -- Cancellation request flow (BUG-033)
+  cancellation_requested_at  timestamptz,
+  cancellation_reason        text,
+  created_at                 timestamptz default now()
 );
 
 create index if not exists bookings_stall_id_idx on bookings(stall_id);
@@ -221,7 +227,10 @@ create trigger vendors_touch_trigger
   before update on vendors
   for each row execute function public.vendors_touch();
 
--- 2.4 enforce_booking_limit — max 2 bookings confirmed per evento per user.
+-- 2.4 enforce_booking_limit — max 2 bookings (confirmed+pending) per evento.
+-- Conta anche pending per evitare bypass via Stripe (BUG-030):
+-- senza, l'utente faceva 2 confirmed + 1 pending → pagava → webhook
+-- bloccato dal trigger su pending→confirmed → silent failure + addebito.
 -- Gli admin sono esenti.
 create or replace function public.enforce_booking_limit()
 returns trigger
@@ -231,12 +240,12 @@ as $$
 declare
   current_count int;
 begin
-  if NEW.status = 'confirmed' and NEW.user_id is not null and not public.is_admin() then
+  if NEW.status in ('confirmed','pending') and NEW.user_id is not null and not public.is_admin() then
     select count(*) into current_count
       from bookings
       where user_id  = NEW.user_id
         and event_id = NEW.event_id
-        and status   = 'confirmed'
+        and status in ('confirmed','pending')
         and id <> coalesce(NEW.id, '00000000-0000-0000-0000-000000000000'::uuid);
     if current_count >= 2 then
       raise exception 'Hai raggiunto il limite di 2 posteggi per questo evento'

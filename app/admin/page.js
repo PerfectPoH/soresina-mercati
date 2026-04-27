@@ -11,23 +11,41 @@ export const fetchCache = 'force-no-store'
 
 async function getAdminData() {
   const supabase = createSupabaseServerClient()
-  const [eventsRes, bookingsRes] = await Promise.all([
+  const [eventsRes, bookingsRes, cancelReqRes] = await Promise.all([
     supabase.from('events').select('*').order('date'),
     supabase
       .from('bookings')
-      .select('*, stalls(label), events(title, date)')
+      // BUG-029: prendiamo anche stalls.price + events.price_per_stall per
+      // calcolare l'incasso REALE (prima era hardcoded 35€ per booking).
+      .select('*, stalls(label, price), events(title, date, price_per_stall)')
       .eq('status', 'confirmed')
       .order('created_at', { ascending: false })
       .limit(500),
+    // Conteggio richieste cancellazione pending (badge nel link)
+    supabase
+      .from('bookings')
+      .select('id', { count: 'exact', head: true })
+      .not('cancellation_requested_at', 'is', null)
+      .neq('status', 'cancelled'),
   ])
   return {
-    events:   eventsRes.data  || [],
-    bookings: bookingsRes.data || [],
+    events:           eventsRes.data  || [],
+    bookings:         bookingsRes.data || [],
+    cancelRequests:   cancelReqRes.count || 0,
   }
 }
 
+// Somma il prezzo realmente pagato per ogni booking (priorità a stalls.price
+// se settato sul singolo posteggio, altrimenti il default dell'evento).
+function calcolaIncasso(bookings) {
+  return bookings.reduce((acc, b) => {
+    const price = b.stalls?.price ?? b.events?.price_per_stall ?? 0
+    return acc + Number(price)
+  }, 0)
+}
+
 export default async function AdminPage() {
-  const { events, bookings } = await getAdminData()
+  const { events, bookings, cancelRequests } = await getAdminData()
 
   return (
     <div>
@@ -37,6 +55,17 @@ export default async function AdminPage() {
           <p className="text-stone-400 text-sm mt-0.5">Gestione mercati Pro Loco Soresina</p>
         </div>
         <div className="flex items-center gap-2">
+          <Link
+            href="/admin/cancellazioni"
+            className="text-sm px-4 py-2 rounded-lg border border-stone-200 text-stone-700 hover:bg-stone-50 transition-colors no-underline relative"
+          >
+            Cancellazioni
+            {cancelRequests > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                {cancelRequests}
+              </span>
+            )}
+          </Link>
           <Link
             href="/admin/lista-attesa"
             className="text-sm px-4 py-2 rounded-lg border border-stone-200 text-stone-700 hover:bg-stone-50 transition-colors no-underline"
@@ -76,7 +105,7 @@ export default async function AdminPage() {
         {[
           { label: 'Eventi attivi',   val: events.filter(e => e.active).length },
           { label: 'Prenotazioni',    val: bookings.length },
-          { label: 'Incasso stimato', val: `${bookings.length * 35}€` },
+          { label: 'Incasso stimato', val: `${calcolaIncasso(bookings)}€` },
           { label: 'Prossimo evento', val: events.find(e => new Date(e.date) >= new Date())?.title?.split(' ').slice(-1)[0] || '—' },
         ].map(k => (
           <div key={k.label} className="bg-white border border-stone-200 rounded-xl p-4">

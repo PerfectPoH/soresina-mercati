@@ -99,6 +99,16 @@ export async function POST(request) {
       )
     }
 
+    // Eredita posizioni satellitari dei posteggi dall'ultimo evento alla
+    // stessa location (se esiste). Best-effort: l'admin puo' sempre
+    // riposizionare a mano dall'editor mappa.
+    const { error: copyPosErr } = await supabase.rpc('copy_stall_positions_from_template', {
+      p_event_id: event.id,
+    })
+    if (copyPosErr) {
+      safeLogError('[api/events POST] copy_stall_positions failed', copyPosErr)
+    }
+
     // Nuovo evento visibile in home + dashboard admin.
     try {
       revalidatePath('/')

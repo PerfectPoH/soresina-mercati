@@ -76,6 +76,16 @@ export async function PATCH(request, { params }) {
     const auth = await requireAdmin(supabase)
     if (auth.error) return auth.error
 
+    // Stato attuale dell'evento (serve per validazione rows/cols crescenti)
+    const { data: eventCurrent } = await supabase
+      .from('events')
+      .select('rows, cols')
+      .eq('id', params.id)
+      .maybeSingle()
+    if (!eventCurrent) {
+      return NextResponse.json({ error: 'not_found', message: 'Evento non trovato.' }, { status: 404 })
+    }
+
     // Validazione dei soli campi presenti
     const update = {}
     if (typeof body.active === 'boolean') update.active = body.active
@@ -104,6 +114,40 @@ export async function PATCH(request, { params }) {
       const r = validateNumber(body.price_per_stall, { field: 'Prezzo', min: 0, max: 1000 })
       if (!r.ok) return NextResponse.json({ error: 'invalid_input', message: r.error }, { status: 400 })
       update.price_per_stall = r.value
+    }
+
+    // BUG-031: rows/cols modificabili in update, ma SOLO in aumento.
+    // Diminuire le dimensioni distruggerebbe posteggi esistenti (e relative
+    // prenotazioni). Per shrinkare un mercato l'admin deve creare un nuovo
+    // evento e archiviare il vecchio.
+    let needsGenerateStalls = false
+    if (body.rows !== undefined) {
+      const r = validateInt(body.rows, { field: 'Righe', min: 1, max: 10 })
+      if (!r.ok) return NextResponse.json({ error: 'invalid_input', message: r.error }, { status: 400 })
+      // Confronto contro lo stato attuale dell'evento (preso a inizio handler)
+      if (r.value > (eventCurrent?.rows ?? 0)) {
+        update.rows = r.value
+        needsGenerateStalls = true
+      } else if (r.value < (eventCurrent?.rows ?? 0)) {
+        return NextResponse.json(
+          { error: 'invalid_input', message: 'Le righe possono essere solo aumentate. Per ridurle archivia l\'evento e creane uno nuovo.' },
+          { status: 400 }
+        )
+      }
+      // r.value === current → noop, non includiamo nell'update
+    }
+    if (body.cols !== undefined) {
+      const r = validateInt(body.cols, { field: 'Colonne', min: 1, max: 20 })
+      if (!r.ok) return NextResponse.json({ error: 'invalid_input', message: r.error }, { status: 400 })
+      if (r.value > (eventCurrent?.cols ?? 0)) {
+        update.cols = r.value
+        needsGenerateStalls = true
+      } else if (r.value < (eventCurrent?.cols ?? 0)) {
+        return NextResponse.json(
+          { error: 'invalid_input', message: 'Le colonne possono essere solo aumentate. Per ridurle archivia l\'evento e creane uno nuovo.' },
+          { status: 400 }
+        )
+      }
     }
     if (body.image_url !== undefined) {
       // Stringa vuota -> rimuovi immagine esistente
@@ -152,25 +196,47 @@ export async function PATCH(request, { params }) {
       update.map_zoom = r.value
     }
 
-    if (Object.keys(update).length === 0) {
+    // Se serve solo "needsGenerateStalls" senza altri update, va bene
+    // procedere comunque per generare i nuovi posteggi.
+    if (Object.keys(update).length === 0 && !needsGenerateStalls) {
       return NextResponse.json({ error: 'no_changes', message: 'Nessun campo da aggiornare.' }, { status: 400 })
     }
 
     // BUG-016: usiamo .select().maybeSingle() per distinguere "non trovato"
     // (RLS o ID inesistente) da "errore". .single() farebbe esplodere su 0 row.
-    const { data, error } = await supabase
-      .from('events')
-      .update(update)
-      .eq('id', params.id)
-      .select()
-      .maybeSingle()
+    let data = null
+    if (Object.keys(update).length > 0) {
+      const r = await supabase
+        .from('events')
+        .update(update)
+        .eq('id', params.id)
+        .select()
+        .maybeSingle()
+      if (r.error) {
+        return NextResponse.json({ error: r.error.code || 'update_failed', message: r.error.message }, { status: 400 })
+      }
+      if (!r.data) {
+        return NextResponse.json({ error: 'not_found', message: 'Evento non trovato o non autorizzato.' }, { status: 404 })
+      }
+      data = r.data
+    }
 
-    if (error) {
-      return NextResponse.json({ error: error.code || 'update_failed', message: error.message }, { status: 400 })
+    // BUG-031: se rows/cols sono aumentate, generiamo i nuovi posteggi
+    // mancanti (`generate_stalls` ha ON CONFLICT DO NOTHING quindi non
+    // tocca quelli esistenti) e copiamo le posizioni dal template
+    // (ultimo evento alla stessa location) per i nuovi posteggi.
+    if (needsGenerateStalls) {
+      const { error: genErr } = await supabase.rpc('generate_stalls', { p_event_id: params.id })
+      if (genErr) {
+        safeLogError('[api/events PATCH] generate_stalls failed', genErr)
+      } else {
+        const { error: copyErr } = await supabase.rpc('copy_stall_positions_from_template', {
+          p_event_id: params.id,
+        })
+        if (copyErr) safeLogError('[api/events PATCH] copy_stall_positions failed', copyErr)
+      }
     }
-    if (!data) {
-      return NextResponse.json({ error: 'not_found', message: 'Evento non trovato o non autorizzato.' }, { status: 404 })
-    }
+
     // Edit o archiviazione evento: invalida home (lista mercati attivi),
     // dashboard admin (lista con filtri), e la pagina evento stessa.
     try {
@@ -178,7 +244,7 @@ export async function PATCH(request, { params }) {
       revalidatePath('/admin')
       revalidatePath(`/evento/${params.id}`)
     } catch (_) {}
-    return NextResponse.json({ data })
+    return NextResponse.json({ data: data ?? { id: params.id } })
   } catch (err) {
     safeLogError('[api/events PATCH] unexpected error', err)
     return NextResponse.json({ error: 'unexpected', message: 'Errore del server.' }, { status: 500 })

@@ -2,6 +2,7 @@ import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import DeleteAccountButton from '@/components/DeleteAccountButton'
+import RequestBookingCancellation from '@/components/RequestBookingCancellation'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -15,22 +16,37 @@ export default async function ProfiloPage() {
   const supabase = createSupabaseServerClient()
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) {
-    // Redirect a login con ritorno dopo autenticazione
     redirect('/accedi')
   }
 
-  const [{ data: vendor }, { data: bookingsAgg }] = await Promise.all([
+  // BUG-032: lista completa delle prenotazioni con dettagli (data, evento,
+  // posteggio, prezzo pagato, stato), ordinate dalla più recente.
+  const [{ data: vendor }, { data: bookings }] = await Promise.all([
     supabase.from('vendors')
       .select('name, email, phone, primary_goods_type, vat_number, role, created_at, consent_at')
       .eq('user_id', session.user.id)
       .maybeSingle(),
     supabase.from('bookings')
-      .select('id, status')
-      .eq('user_id', session.user.id),
+      .select(`
+        id, status, goods_type, created_at,
+        events ( id, title, date, price_per_stall ),
+        stalls ( id, label, price )
+      `)
+      .eq('user_id', session.user.id)
+      .order('created_at', { ascending: false }),
   ])
 
-  const totalBookings     = bookingsAgg?.length || 0
-  const confirmedBookings = bookingsAgg?.filter(b => b.status === 'confirmed').length || 0
+  const list = bookings || []
+  const totalBookings     = list.length
+  const confirmedBookings = list.filter(b => b.status === 'confirmed').length
+
+  const today = new Date().toISOString().slice(0, 10)
+  function classify(b) {
+    if (b.status === 'cancelled')                 return { key: 'cancelled', label: 'Annullata',  color: 'stone' }
+    if (b.events?.date && b.events.date < today)  return { key: 'past',      label: 'Passata',    color: 'stone' }
+    if (b.status === 'pending')                   return { key: 'pending',   label: 'In attesa',  color: 'amber' }
+    return                                              { key: 'active',    label: 'Attiva',     color: 'green' }
+  }
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -56,11 +72,51 @@ export default async function ProfiloPage() {
       </div>
 
       <div className="bg-white border border-stone-200 rounded-2xl p-6 mb-6">
-        <h2 className="text-sm font-medium text-stone-800 mb-3">Le mie prenotazioni</h2>
-        <div className="grid grid-cols-2 gap-3">
-          <Stat label="Totali"      value={totalBookings} />
-          <Stat label="Confermate"  value={confirmedBookings} />
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-medium text-stone-800">Le mie prenotazioni</h2>
+          <div className="flex gap-2 text-xs">
+            <span className="text-stone-500">Totali: <strong>{totalBookings}</strong></span>
+            <span className="text-stone-500">Confermate: <strong>{confirmedBookings}</strong></span>
+          </div>
         </div>
+
+        {list.length === 0 ? (
+          <p className="text-sm text-stone-500 italic py-2">
+            Non hai ancora prenotato nessun posteggio.{' '}
+            <Link href="/" className="text-amber-700 underline">Vai ai mercati</Link>.
+          </p>
+        ) : (
+          <ul className="divide-y divide-stone-100">
+            {list.map(b => {
+              const cls = classify(b)
+              const price = b.stalls?.price ?? b.events?.price_per_stall ?? 0
+              const canRequestCancel = cls.key === 'active' || cls.key === 'pending'
+              return (
+                <li key={b.id} className="py-3 flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Link
+                        href={`/prenotato/${b.id}`}
+                        className="text-sm font-medium text-stone-900 hover:text-amber-700 truncate"
+                      >
+                        {b.events?.title || 'Evento'}
+                      </Link>
+                      <Badge color={cls.color} label={cls.label} />
+                    </div>
+                    <div className="text-xs text-stone-500 space-y-0.5">
+                      <div>📅 {formatDate(b.events?.date)}</div>
+                      <div>📍 Posteggio <span className="font-mono">{b.stalls?.label || '—'}</span> · {b.goods_type}</div>
+                      <div>💶 {price}€</div>
+                    </div>
+                  </div>
+                  {canRequestCancel && (
+                    <RequestBookingCancellation bookingId={b.id} />
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )}
       </div>
 
       <div className="bg-red-50 border border-red-200 rounded-2xl p-6">
@@ -92,12 +148,16 @@ function Field({ label, value }) {
   )
 }
 
-function Stat({ label, value }) {
+function Badge({ color, label }) {
+  const map = {
+    green: 'bg-green-100 text-green-800',
+    amber: 'bg-amber-100 text-amber-800',
+    stone: 'bg-stone-100 text-stone-600',
+  }
   return (
-    <div className="bg-stone-50 rounded-lg p-3">
-      <div className="text-xs text-stone-400">{label}</div>
-      <div className="text-xl font-medium text-stone-900">{value}</div>
-    </div>
+    <span className={`text-[10px] uppercase tracking-wide font-medium px-2 py-0.5 rounded-full ${map[color] || map.stone}`}>
+      {label}
+    </span>
   )
 }
 

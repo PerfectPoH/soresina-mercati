@@ -143,13 +143,22 @@ async function handleCheckoutCompleted(supabase, session) {
   const bookingId = session.metadata?.booking_id
   if (!bookingId) return
 
+  // Salviamo session_id + payment_intent: serviranno per il rimborso
+  // quando l'admin approva una richiesta di cancellazione.
   // Confermiamo solo se la booking e' ancora pending. Evita che un
   // checkout.session.completed che arriva DOPO un expired sovrascriva
   // 'cancelled' con 'confirmed' per un pagamento mai realmente avvenuto.
-  // Anche evita di re-confermare bookings gia' confirmed.
+  const paymentIntent = typeof session.payment_intent === 'string'
+    ? session.payment_intent
+    : session.payment_intent?.id || null
+
   const { error } = await supabase
     .from('bookings')
-    .update({ status: 'confirmed' })
+    .update({
+      status: 'confirmed',
+      stripe_session_id:        session.id || null,
+      stripe_payment_intent_id: paymentIntent,
+    })
     .eq('id', bookingId)
     .eq('status', 'pending')
 
