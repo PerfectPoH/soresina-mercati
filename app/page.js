@@ -11,10 +11,15 @@ export const revalidate = 0
 export const fetchCache = 'force-no-store'
 
 async function getEvents() {
+  // BUG-037: in homepage mostriamo SOLO eventi futuri (date >= oggi).
+  // Gli eventi passati restano nel DB per storico ma non sono prenotabili
+  // ne' visibili al pubblico. L'admin li vede archiviati nella dashboard.
+  const todayIso = new Date().toISOString().slice(0, 10)
   const { data, error } = await supabase
     .from('events')
     .select('*')
     .eq('active', true)
+    .gte('date', todayIso)
     .order('date', { ascending: true })
 
   if (error) {

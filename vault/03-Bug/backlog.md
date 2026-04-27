@@ -5,7 +5,7 @@ ultimo-aggiornamento: 2026-04-26
 
 # Backlog dei Bug
 
-> 🟢 **0 bug critici aperti.** BUG-029..033 + feature "template posizioni stalls" chiusi nella sessione 2026-04-26 notte (Opus). Restano solo 4 tech-debt non bloccanti.
+> 🟢 **0 bug critici aperti.** BUG-034..037 chiusi nella sessione 2026-04-26 notte tarda (Opus). Restano solo 4 tech-debt non bloccanti.
 >
 > 📚 Storia completa di BUG-001 → BUG-025 (con cause, fix, motivazioni di chiusura) è in [[Bug-Risolti-Storico]] (in `_archive`).
 
@@ -14,6 +14,33 @@ ultimo-aggiornamento: 2026-04-26
 ## 🔴 Bug aperti
 
 *(nessuno)*
+
+---
+
+## 🆕 Bug risolti in questa sessione (26 Apr notte tarda, Opus)
+
+### BUG-034 — Eventi creabili con date passate
+- **Sintomo**: l'admin poteva creare un evento con `date < today`.
+- **Fix**: validazione `date >= todayIso` su `POST /api/events` e `PATCH /api/events/[id]`. Permette `today` per eventi serali creati nel pomeriggio. Errore 400 esplicito.
+
+### BUG-035 — Prenotazione gratuita resta "in attesa di conferma"
+- **Sintomo**: utente prenota posteggio gratuito → vede pagina conferma → torna in mappa → posteggio giallo "in attesa".
+- **Causa**: il flusso 0 EUR usava `createSupabaseServerClient` (cookie utente) per fare `UPDATE bookings SET status='confirmed'`. La policy RLS `bookings_admin_update` richiede `is_admin()` → l'update veniva scartato silenziosamente → booking restava `pending`.
+- **Fix**: il flusso 0 EUR ora usa `createSupabaseAdminClient` (service role bypass RLS), come già fa il webhook Stripe. Coerente con la stessa logica `pending → confirmed` server-to-server.
+
+### BUG-036 — Iscrizione a lista d'attesa con max prenotazioni già raggiunto
+- **Sintomo**: utente con 2 confirmed/pending poteva comunque iscriversi alla waitlist.
+- **Fix**: in `POST /api/waitlist`, dopo il check vendor profilo, count delle prenotazioni `confirmed+pending` per quell'evento. Se ≥ 2 → 400 "Hai già il numero massimo di prenotazioni per questo evento. La lista d'attesa serve a chi non ha ancora prenotato."
+
+### BUG-037 — Eventi passati restano visibili e prenotabili
+- **Sintomo**: gli eventi con `date < today` apparivano in homepage, e gli utenti potevano cliccarli e prenotare.
+- **Fix in più livelli**:
+  - **Home `/`**: query filtra `date >= today` (gli eventi passati spariscono dalla lista pubblica)
+  - **Pagina evento `/evento/[id]`**: se `isPast`, banner "Mercato concluso" + `BookingForm` non mostrato (passato `isPast` a `StallMapTabs` → `StallMap`, che disabilita le celle e blocca `handleSelect`)
+  - **API `/api/book`**: server-side check `event_date < today` → 400 `event_past` (difesa contro bypass via curl)
+  - **API `/api/waitlist`**: stesso check → 400 `event_past`
+  - **Profilo utente**: gli eventi passati restano visibili nelle prenotazioni dell'utente con badge "Passata" (UX corretta: lo storico personale è importante)
+- **Stato**: ✅ RISOLTO
 
 ---
 

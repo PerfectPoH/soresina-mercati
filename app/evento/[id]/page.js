@@ -109,8 +109,14 @@ export default async function EventoPage({ params }) {
   const isFull    = freeCount === 0 && stalls.length > 0
   const isAdmin   = vendor?.role === 'admin'
 
-  // Carica info waitlist solo quando serve (evento pieno, non admin)
-  const waitlist = (isFull && !isAdmin)
+  // BUG-037: evento passato → niente prenotazione, niente waitlist.
+  // Confronto YYYY-MM-DD: la data dell'evento e' un date PostgreSQL,
+  // confrontiamo a livello calendario.
+  const todayIso  = new Date().toISOString().slice(0, 10)
+  const isPast    = event.date < todayIso
+
+  // Carica info waitlist solo quando serve (evento pieno, non admin, non passato)
+  const waitlist = (isFull && !isAdmin && !isPast)
     ? await getWaitlistInfo(event.id, user?.id)
     : null
 
@@ -191,8 +197,22 @@ export default async function EventoPage({ params }) {
         </p>
       )}
 
-      {/* Banner lista d'attesa (evento pieno, vendor non admin) */}
-      {isFull && !isAdmin && (
+      {/* BUG-037: banner evento passato — niente prenotazione possibile */}
+      {isPast && (
+        <div className="mb-6 max-w-xl rounded-2xl border border-stone-200 bg-stone-50 p-5 text-stone-700">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xl" aria-hidden="true">🔒</span>
+            <h2 className="text-base font-medium text-stone-900">Mercato concluso</h2>
+          </div>
+          <p className="text-sm text-stone-600">
+            Questo mercato si è già svolto. Le prenotazioni non sono più possibili. Resta in archivio per riferimento.
+            <Link href="/" className="ml-1 text-amber-700 underline">Vedi i prossimi mercati</Link>.
+          </p>
+        </div>
+      )}
+
+      {/* Banner lista d'attesa (evento pieno, vendor non admin, non passato) */}
+      {isFull && !isAdmin && !isPast && (
         <div className="mb-6 max-w-xl">
           <WaitlistWidget
             event={event}
@@ -236,7 +256,13 @@ export default async function EventoPage({ params }) {
       {/* Mappa interattiva dei posteggi — tab Griglia + Satellite.
           Il tab Satellite mostra i posteggi posizionati dall'admin sulla
           vista aerea Esri World Imagery (senza API key ne' billing). */}
-      <StallMapTabs stalls={stalls} event={event} currentUser={user} currentVendor={vendor} />
+      <StallMapTabs
+        stalls={stalls}
+        event={event}
+        currentUser={user}
+        currentVendor={vendor}
+        isPast={isPast}
+      />
     </div>
   )
 }

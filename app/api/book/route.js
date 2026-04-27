@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from '@/lib/supabase-server'
+import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { enforceRateLimit } from '@/lib/rate-limit'
@@ -108,7 +109,7 @@ export async function POST(request) {
     // sbagliato. .maybeSingle() per non esplodere su 0 row.
     const { data: stallData, error: stallErr } = await supabase
       .from('stalls_with_status')
-      .select('price, default_price, event_title, label, event_id')
+      .select('price, default_price, event_title, label, event_id, event_date')
       .eq('id', stall_id)
       .eq('event_id', event_id)
       .maybeSingle()
@@ -124,6 +125,16 @@ export async function POST(request) {
       return NextResponse.json(
         { error: 'stall_not_found', message: 'Posteggio non trovato per questo evento.' },
         { status: 404 }
+      )
+    }
+
+    // BUG-037: niente prenotazioni su eventi passati (controllo server-side
+    // anche oltre alla UI, per evitare bypass via curl o client malevolo).
+    const todayIso = new Date().toISOString().slice(0, 10)
+    if (stallData.event_date && stallData.event_date < todayIso) {
+      return NextResponse.json(
+        { error: 'event_past', message: 'Questo mercato si è già svolto e non è più prenotabile.' },
+        { status: 400 }
       )
     }
 
@@ -162,11 +173,17 @@ export async function POST(request) {
       )
     }
 
-    // 7. Caso eventi gratuiti (BUG-015 follow-up): se amountToPay === 0
+    // 7. Caso eventi gratuiti (BUG-015 follow-up + BUG-035): se amountToPay === 0
     // saltiamo Stripe e confermiamo subito. Stripe Checkout non accetta
     // unit_amount=0 e non avrebbe senso pagare 0 EUR.
+    //
+    // BUG-035: l'UPDATE pending→confirmed deve usare il client ADMIN (service
+    // role) perche' la policy bookings_admin_update richiede is_admin().
+    // Se usiamo il client cookie-based, RLS scarta l'update silenziosamente
+    // e il booking resta pending nonostante l'API risponda 200.
     if (amountToPay === 0) {
-      const { error: confirmErr } = await supabase
+      const adminSb = createSupabaseAdminClient()
+      const { error: confirmErr } = await adminSb
         .from('bookings')
         .update({ status: 'confirmed' })
         .eq('id', data.id)

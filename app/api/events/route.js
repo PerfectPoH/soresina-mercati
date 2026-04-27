@@ -38,6 +38,18 @@ export async function POST(request) {
     if (!v.ok) return NextResponse.json({ error: 'invalid_input', message: v.error }, { status: 400 })
     const { title, description, date, location, rows, cols, price_per_stall, image_url } = v.data
 
+    // BUG-034: la data dell'evento non puo' essere passata. Confronto in
+    // formato YYYY-MM-DD (ignora il fuso orario, usa il giorno calendariale
+    // del server). Permettiamo "oggi" per casi limite (es. evento serale
+    // creato la mattina stessa).
+    const todayIso = new Date().toISOString().slice(0, 10)
+    if (date < todayIso) {
+      return NextResponse.json(
+        { error: 'invalid_input', message: 'La data dell\'evento non puo\' essere nel passato.' },
+        { status: 400 }
+      )
+    }
+
     const supabase = createSupabaseServerClient()
 
     const { data: { user } } = await supabase.auth.getUser()

@@ -12,7 +12,7 @@ import { createSupabaseBrowserClient } from '@/lib/supabase-browser'
 const ZOOM_STEPS = [32, 44, 56, 72, 92]
 const DEFAULT_ZOOM_INDEX = 1 // -> 44px
 
-export default function StallMap({ stalls, event, currentUser, currentVendor }) {
+export default function StallMap({ stalls, event, currentUser, currentVendor, isPast = false }) {
   const router = useRouter()
   const [selected, setSelected] = useState(null)
   const [localStalls, setLocalStalls] = useState(stalls)
@@ -138,6 +138,9 @@ export default function StallMap({ stalls, event, currentUser, currentVendor }) 
   }
 
   function handleSelect(stall) {
+    // BUG-037: evento passato → niente selezione per i venditori (l'admin
+    // puo' comunque entrare per gestire/sbloccare a fini di archivio).
+    if (isPast && !isAdmin) return
     // L'admin puo' sempre cliccare per gestire il posteggio
     if (!isAdmin && stall.stall_status !== 'free') return
     setSelected(prev => prev?.id === stall.id ? null : stall)
@@ -326,7 +329,8 @@ export default function StallMap({ stalls, event, currentUser, currentVendor }) 
                       const isSelected = selected?.id === stall.id
                       // I non-admin possono interagire SOLO con posteggi liberi.
                       // Booked/pending/blocked sono tutti non-cliccabili per vendor.
-                      const disabled   = !isAdmin && !isFree
+                      // BUG-037: niente prenotazione su eventi passati.
+                      const disabled   = !isAdmin && (!isFree || isPast)
 
                       // min-w/h = cellSize -> scala con zoom utente.
                       // aspect-square mantiene la proporzione quadrata.

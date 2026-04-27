@@ -103,6 +103,15 @@ export async function PATCH(request, { params }) {
     if (body.date !== undefined) {
       const r = validateIsoDate(body.date, { field: 'Data' })
       if (!r.ok) return NextResponse.json({ error: 'invalid_input', message: r.error }, { status: 400 })
+      // BUG-034: niente data passata in PATCH neppure (per coerenza con
+      // POST). L'admin per spostare un evento "indietro" deve archiviarlo.
+      const todayIso = new Date().toISOString().slice(0, 10)
+      if (r.value < todayIso) {
+        return NextResponse.json(
+          { error: 'invalid_input', message: 'La data dell\'evento non puo\' essere nel passato.' },
+          { status: 400 }
+        )
+      }
       update.date = r.value
     }
     if (body.location !== undefined) {

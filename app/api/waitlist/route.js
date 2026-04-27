@@ -38,6 +38,20 @@ export async function POST(request) {
       )
     }
 
+    // BUG-037: niente lista d'attesa su eventi passati.
+    const { data: ev } = await supabase
+      .from('events').select('date, active').eq('id', event_id).maybeSingle()
+    if (!ev) {
+      return NextResponse.json({ error: 'event_not_found', message: 'Evento non trovato.' }, { status: 404 })
+    }
+    const todayIso = new Date().toISOString().slice(0, 10)
+    if (ev.date < todayIso) {
+      return NextResponse.json(
+        { error: 'event_past', message: 'Questo mercato si è già svolto.' },
+        { status: 400 }
+      )
+    }
+
     // BUG-024: rate limit per-utente in aggiunta a quello per IP. Lo schema
     // ha gia' un unique(event_id, user_id) che ferma duplicati semantici, ma
     // un utente potrebbe comunque generare scrittura/log spam tentando piu'
@@ -59,6 +73,27 @@ export async function POST(request) {
     if (!vendor) {
       return NextResponse.json(
         { error: 'no_profile', message: 'Profilo venditore non trovato.' },
+        { status: 400 }
+      )
+    }
+
+    // BUG-036: se l'utente ha gia' raggiunto il limite di 2 prenotazioni
+    // confirmed/pending per questo evento, la lista d'attesa non ha senso.
+    // La waitlist serve agli utenti che NON sono riusciti a prenotare,
+    // non a chi ha gia' prenotato il massimo.
+    const { count: activeBookings } = await supabase
+      .from('bookings')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('event_id', event_id)
+      .in('status', ['confirmed', 'pending'])
+
+    if ((activeBookings || 0) >= 2) {
+      return NextResponse.json(
+        {
+          error: 'already_booked_max',
+          message: 'Hai gia\' il numero massimo di prenotazioni (2) per questo evento. La lista d\'attesa serve a chi non ha ancora prenotato.',
+        },
         { status: 400 }
       )
     }

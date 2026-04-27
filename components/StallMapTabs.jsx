@@ -32,7 +32,7 @@ const StallMapSatellite = dynamic(() => import('./StallMapSatellite'), {
   ),
 })
 
-export default function StallMapTabs({ stalls, event, currentUser, currentVendor }) {
+export default function StallMapTabs({ stalls, event, currentUser, currentVendor, isPast = false }) {
   const [tab, setTab] = useState('grid') // 'grid' | 'sat'
 
   return (
@@ -90,6 +90,7 @@ export default function StallMapTabs({ stalls, event, currentUser, currentVendor
           event={event}
           currentUser={currentUser}
           currentVendor={currentVendor}
+          isPast={isPast}
         />
       </div>
 
