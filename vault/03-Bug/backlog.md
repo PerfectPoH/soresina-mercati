@@ -5,7 +5,7 @@ ultimo-aggiornamento: 2026-04-26
 
 # Backlog dei Bug
 
-> 🟢 **0 bug critici aperti.** BUG-034..037 chiusi nella sessione 2026-04-26 notte tarda (Opus). Restano solo 4 tech-debt non bloccanti.
+> 🟢 **0 bug critici aperti.** BUG-038..041 + audit Codex 27 apr (BUG-027 reale fix, GOODS_TYPES residuo, accessibility/lint warnings) chiusi nella sessione 2026-04-27 (Opus). Restano solo 4 tech-debt non bloccanti.
 >
 > 📚 Storia completa di BUG-001 → BUG-025 (con cause, fix, motivazioni di chiusura) è in [[Bug-Risolti-Storico]] (in `_archive`).
 
@@ -17,7 +17,72 @@ ultimo-aggiornamento: 2026-04-26
 
 ---
 
-## 🆕 Bug risolti in questa sessione (26 Apr notte tarda, Opus)
+## 🆕 Bug risolti in questa sessione (27 Apr, Opus)
+
+### BUG-038 — Admin mostrava prenotazioni di mercati passati con bottone "Annulla"
+- **Sintomo**: dashboard admin elencava bookings di eventi conclusi e permetteva di annullarle (distorcendo storico/statistiche).
+- **Fix**:
+  - `app/admin/page.js`: query bookings filtrata `events.date >= today` (inner join). Le prenotazioni passate restano nel DB (e nel profilo utente con badge "Passata") ma non appaiono nella dashboard "operativa".
+  - `components/AdminBookingRow.jsx`: per le prenotazioni di eventi passati (caso edge: se il filtro non basta) il bottone "Annulla" è sostituito da label "Storico".
+- **Stato**: ✅ RISOLTO
+
+### BUG-039 — Mercati passati restavano "Attivi" nell'admin
+- **Sintomo**: gli eventi conclusi continuavano a essere `active=true`, mescolati ai mercati futuri nella dashboard.
+- **Fix**:
+  - **DB**: migration `19_auto_archive_past_events_and_waitlist_promote` aggiunge funzione `archive_past_events()` SECURITY DEFINER + cron `pg_cron` ogni notte alle 03:15 → setta `active=false` per eventi con `date < current_date`. Eseguito subito un primo run: 2 eventi passati archiviati su staging.
+  - **UI**: dashboard admin separa **Eventi attivi** (sezione principale) e **Archivio** (sezione collassabile `<details>` con tutti gli eventi passati o disattivati). Lo storico è sempre accessibile in 1 click.
+- **Stato**: ✅ RISOLTO
+
+### BUG-040 — Email post-cancellazione/rimborso non inviate
+- **Sintomo**: quando admin annulla o approva richiesta cancellazione, l'utente non riceve nessuna notifica email.
+- **Stato**: ⏳ PARCHEGGIATO (dipende da Resend onboarding). Quando si implementa la pipeline email transazionali, va aggiunto in:
+  - Webhook Stripe (conferma prenotazione)
+  - Cancellation API (notifica all'utente quando l'admin approva con/senza rimborso)
+  - Promote waitlist API (notifica all'utente promosso che ha 24h per pagare)
+
+### BUG-041 — Lista d'attesa solo passiva (admin poteva solo rimuovere)
+- **Sintomo**: nessun flusso di assegnazione automatica/manuale quando un posto si libera.
+- **Idea Salandra**: lista d'attesa **generale** (qualsiasi posto) o **specifica** per posto. Quando si libera, primo in lista riceve un booking pending con scadenza 24h.
+- **Fix**:
+  - **DB** (migration `19`): `waitlist.stall_id uuid` (nullable, NULL=lista generale, valorizzato=lista posto specifico) + `bookings.from_waitlist boolean` + `bookings.waitlist_promoted_at timestamptz`
+  - **Funzione DB** `promote_next_waitlist(p_event_id, p_stall_id)`: priorità a chi ha targetato lo specifico posto, poi lista generale. Crea booking `pending` con `from_waitlist=true` + `waitlist_promoted_at=now()`. Se utente è al limite booking (P0001), salta e prova il successivo. Rimuove la entry dalla waitlist.
+  - **Funzione DB** `release_expired_waitlist_promotions()`: cron orario, cancella i pending da waitlist scaduti (> 24h) e auto-promuove il successivo.
+  - **API admin** `POST /api/admin/bookings/[id]/cancel`: dopo refund Stripe, chiama `promote_next_waitlist(event_id, stall_id)` per assegnare automaticamente il posto liberato.
+  - **API admin** `POST /api/admin/waitlist/[id]/promote`: promozione manuale di un'iscrizione (per lista generale, sceglie il primo posto libero).
+  - **UI admin** `components/AdminWaitlistRow.jsx`: bottone "Promuovi" oltre a "Rimuovi". Crea booking pending 24h.
+- **Email/notifica al promosso**: parking BUG-040 (Resend).
+- **Stato**: ✅ RISOLTO (logic + DB + UI). Email da implementare con Resend.
+
+---
+
+## 🩺 Audit Codex 2026-04-27 — punti chiusi
+
+### [P1] BUG-027 reale fix — `npm run build` ora verde
+- **Diagnosi Codex**: `dynamic = 'force-dynamic'` su `app/opengraph-image.js` (metadata file convention) NON salta il prerender al build → `@vercel/og` su Windows continuava a fallire con `TypeError: Invalid URL`.
+- **Fix definitivo**: rimosso `app/opengraph-image.js`, creata route API `app/api/og/route.js` (che NON viene prerender al build). `app/layout.js` referenzia `metadata.openGraph.images = ['/api/og']` esplicitamente. Aggiunti header `Cache-Control` per evitare rigenerazione su ogni preview.
+- **Stato**: ✅ RISOLTO definitivo.
+
+### [P2] GOODS_TYPES residuo in WaitlistWidget — chiusura BUG-023
+- **Fix**: rimossa l'ultima copia hardcoded di `GOODS_TYPES` in `components/WaitlistWidget.jsx`. Ora importa da `lib/validate`.
+- **Stato**: ✅ RISOLTO definitivo.
+
+### [P3] Accessibility: `aria-pressed` su `role="gridcell"`
+- **Fix**: `components/StallMap.jsx` riga 390 cambiato da `aria-pressed` a `aria-selected` (compatibile con role gridcell).
+- **Stato**: ✅ RISOLTO
+
+### [P3] react-hooks/exhaustive-deps in StallMapSatellite
+- **Fix**: `MapController` ora usa `centerKey` (stringa) come dep stabile invece di indici `center[0], center[1]`.
+- **Stato**: ✅ RISOLTO
+
+### Punti audit ancora aperti (non bloccanti)
+- **Date helper UTC vs locale**: `toISOString().slice(0, 10)` usato in 9+ file. Per il volume Pro Loco (1 timezone, eventi giornalieri) rischio teorico (drift di 1-2h al confine notturno). Tech-debt da affrontare se diventiamo multi-region.
+- **README.md / docs/SECURITY.md fuori sync**: aggiornati in questa sessione (vedi devlog).
+- **EventForm.jsx commenti ambigui rows/cols**: aggiornati.
+- **GDPR `consent_at` non valorizzato in bootstrap profilo**: tech-debt — quando un utente fa signup il consent va salvato esplicitamente. Da affrontare nella fase email Resend.
+
+---
+
+## 🆕 Bug risolti in sessione (26 Apr notte tarda, Opus)
 
 ### BUG-034 — Eventi creabili con date passate
 - **Sintomo**: l'admin poteva creare un evento con `date < today`.

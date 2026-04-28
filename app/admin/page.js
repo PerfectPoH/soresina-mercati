@@ -11,27 +11,36 @@ export const fetchCache = 'force-no-store'
 
 async function getAdminData() {
   const supabase = createSupabaseServerClient()
+  const todayIso = new Date().toISOString().slice(0, 10)
   const [eventsRes, bookingsRes, cancelReqRes] = await Promise.all([
     supabase.from('events').select('*').order('date'),
     supabase
       .from('bookings')
-      // BUG-029: prendiamo anche stalls.price + events.price_per_stall per
-      // calcolare l'incasso REALE (prima era hardcoded 35€ per booking).
-      .select('*, stalls(label, price), events(title, date, price_per_stall)')
+      // BUG-029: incasso reale.
+      // BUG-038: filtriamo solo prenotazioni di eventi attivi/futuri.
+      // Lo storico delle prenotazioni passate resta nel DB (e nel
+      // profilo utente) ma la dashboard "operativa" mostra solo i
+      // mercati ancora da svolgersi.
+      .select('*, stalls(label, price), events!inner(title, date, price_per_stall)')
       .eq('status', 'confirmed')
+      .gte('events.date', todayIso)
       .order('created_at', { ascending: false })
       .limit(500),
-    // Conteggio richieste cancellazione pending (badge nel link)
     supabase
       .from('bookings')
       .select('id', { count: 'exact', head: true })
       .not('cancellation_requested_at', 'is', null)
       .neq('status', 'cancelled'),
   ])
+  // BUG-039: separiamo eventi attivi/futuri da quelli archiviati.
+  const allEvents     = eventsRes.data || []
+  const activeEvents  = allEvents.filter(e => e.active && e.date >= todayIso)
+  const archived      = allEvents.filter(e => !e.active || e.date < todayIso)
   return {
-    events:           eventsRes.data  || [],
-    bookings:         bookingsRes.data || [],
-    cancelRequests:   cancelReqRes.count || 0,
+    events:         activeEvents,
+    archivedEvents: archived,
+    bookings:       bookingsRes.data || [],
+    cancelRequests: cancelReqRes.count || 0,
   }
 }
 
@@ -45,7 +54,7 @@ function calcolaIncasso(bookings) {
 }
 
 export default async function AdminPage() {
-  const { events, bookings, cancelRequests } = await getAdminData()
+  const { events, archivedEvents, bookings, cancelRequests } = await getAdminData()
 
   return (
     <div>
@@ -116,9 +125,13 @@ export default async function AdminPage() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Lista eventi */}
+        {/* Lista eventi: due sezioni — attivi/futuri e archivio.
+            BUG-039: gli eventi passati vengono auto-archiviati dal cron
+            DB ogni notte. Qui li mostriamo in una sezione separata
+            "<details>" così la dashboard resta pulita ma lo storico
+            è accessibile in un click. */}
         <div>
-          <h2 className="text-xs font-medium text-stone-500 uppercase tracking-wider mb-3">Eventi</h2>
+          <h2 className="text-xs font-medium text-stone-500 uppercase tracking-wider mb-3">Eventi attivi</h2>
           <div className="space-y-2">
             {events.map(event => (
               <AdminEventCard key={event.id} event={event} />
@@ -129,6 +142,20 @@ export default async function AdminPage() {
               </div>
             )}
           </div>
+
+          {archivedEvents.length > 0 && (
+            <details className="mt-6 group">
+              <summary className="cursor-pointer text-xs font-medium text-stone-500 uppercase tracking-wider hover:text-stone-700">
+                Archivio · {archivedEvents.length} {archivedEvents.length === 1 ? 'evento' : 'eventi'}
+                <span className="ml-1 text-stone-300 group-open:rotate-90 inline-block transition-transform">▸</span>
+              </summary>
+              <div className="space-y-2 mt-3 opacity-75">
+                {archivedEvents.map(event => (
+                  <AdminEventCard key={event.id} event={event} />
+                ))}
+              </div>
+            </details>
+          )}
         </div>
 
         {/* Prenotazioni con ricerca e filtro */}

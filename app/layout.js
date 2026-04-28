@@ -73,13 +73,16 @@ export const metadata = {
     title:       'Mercati Soresina — Prenota il tuo posteggio',
     description:
       'Prenota online il tuo posteggio ai mercati di Soresina. Gestione posteggi a cura di Pro Loco Soresina.',
-    // app/opengraph-image.js genera /opengraph-image automaticamente (1200x630).
-    // Non serve referenziarla qui: Next la aggiunge al manifest OG in automatico.
+    // BUG-027: l'immagine OG e' generata da /api/og (route API, non
+    // metadata file) per evitare il prerender al build che falliva su
+    // Windows con `@vercel/og` + `fileURLToPath`.
+    images: [{ url: '/api/og', width: 1200, height: 630, alt: 'Mercati Soresina' }],
   },
   twitter: {
     card:        'summary_large_image',
     title:       'Mercati Soresina — Prenota il tuo posteggio',
     description: 'Prenota online il tuo posteggio ai mercati di Soresina.',
+    images:      ['/api/og'],
   },
   robots: {
     index:  true,

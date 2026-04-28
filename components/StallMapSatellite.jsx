@@ -100,9 +100,13 @@ function makeGhostIcon(label) {
 // ---------------------------------------------------------------------------
 function MapController({ center, zoom }) {
   const map = useMap()
+  // Useremo una dep stabile (string) invece di una array index access che
+  // ESLint react-hooks/exhaustive-deps non riesce a tracciare bene.
+  const centerKey = `${center[0]},${center[1]}`
   useEffect(() => {
     map.setView(center, zoom, { animate: true, duration: 0.4 })
-  }, [center[0], center[1], zoom, map])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [centerKey, zoom, map])
   return null
 }
 

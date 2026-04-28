@@ -54,6 +54,7 @@ ultimo-aggiornamento: 2026-04-26
 - [[backlog]] — bug aperti + tech debt (snello)
 
 ### 04-Documentazione
+- [[Code-Review-Codex-vs-Opus]] â€” audit repo + vault del 27 aprile 2026
 - [[Stato-Progetto-2026-04-26]] — snapshot più recente
 - [[README]] — note generali documentazione
 

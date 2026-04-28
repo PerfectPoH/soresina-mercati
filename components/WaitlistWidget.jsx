@@ -3,17 +3,8 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-
-const GOODS_TYPES = [
-  'Abbigliamento',
-  'Alimentari',
-  'Artigianato',
-  'Fiori e piante',
-  'Casalinghi',
-  'Giocattoli',
-  'Elettronica',
-  'Altro',
-]
+// BUG-023 (cleanup): unica fonte di verita' GOODS_TYPES da lib/validate.
+import { GOODS_TYPES } from '@/lib/validate'
 
 // Widget che appare nella pagina evento quando non ci sono piu' posti liberi.
 // Consente al venditore di iscriversi alla lista d'attesa.

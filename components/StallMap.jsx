@@ -387,7 +387,7 @@ export default function StallMap({ stalls, event, currentUser, currentVendor, is
                           onClick={() => handleSelect(stall)}
                           title={title}
                           aria-label={ariaLabel}
-                          aria-pressed={isSelected}
+                          aria-selected={isSelected}
                           aria-disabled={disabled}
                           disabled={disabled}
                         >

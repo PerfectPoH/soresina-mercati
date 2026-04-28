@@ -19,6 +19,7 @@
 | File | Contenuto |
 |------|-----------|
 | [[Roadmap-Master]] | Checklist completa + Prossimi Obiettivi (allineata) |
+| [[Code-Review-Codex-vs-Opus]] | Audit Codex del 27 aprile: allineamento vault/repo/build |
 | [[Stato-Progetto-2026-04-26]] | Snapshot stato attuale (~70% completato) |
 
 ## 🐛 Bug & Backlog

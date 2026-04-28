@@ -58,6 +58,12 @@ export default function AdminBookingRow({ booking, isLast, exportMode, bookings 
 
   if (cancelled) return null
 
+  // BUG-038: prenotazioni di eventi passati sono in sola lettura.
+  // Annullarle non avrebbe senso (l'evento si è già svolto) e potrebbe
+  // distorcere lo storico/statistiche.
+  const todayIso  = new Date().toISOString().slice(0, 10)
+  const isPastEv  = booking.events?.date && booking.events.date < todayIso
+
   return (
     <tr className={!isLast ? 'border-b border-stone-50' : ''} style={{ opacity: cancelling ? 0.4 : 1 }}>
       <td className="px-4 py-3">
@@ -70,13 +76,17 @@ export default function AdminBookingRow({ booking, isLast, exportMode, bookings 
       </td>
       <td className="hidden sm:table-cell px-4 py-3 text-stone-500 text-sm">{booking.goods_type}</td>
       <td className="px-4 py-3 text-right">
-        <button
-          onClick={handleCancel}
-          disabled={cancelling}
-          className="text-xs text-red-400 hover:text-red-600 transition-colors disabled:opacity-40"
-        >
-          {cancelling ? '...' : 'Annulla'}
-        </button>
+        {isPastEv ? (
+          <span className="text-[11px] text-stone-400 italic">Storico</span>
+        ) : (
+          <button
+            onClick={handleCancel}
+            disabled={cancelling}
+            className="text-xs text-red-400 hover:text-red-600 transition-colors disabled:opacity-40"
+          >
+            {cancelling ? '...' : 'Annulla'}
+          </button>
+        )}
       </td>
     </tr>
   )

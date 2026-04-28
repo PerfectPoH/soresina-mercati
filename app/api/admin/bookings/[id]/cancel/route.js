@@ -46,7 +46,7 @@ export async function POST(request, { params }) {
     const admin = createSupabaseAdminClient()
     const { data: booking, error: loadErr } = await admin
       .from('bookings')
-      .select('id, status, event_id, stripe_payment_intent_id, stripe_session_id')
+      .select('id, status, event_id, stall_id, stripe_payment_intent_id, stripe_session_id')
       .eq('id', params.id)
       .maybeSingle()
 
@@ -95,14 +95,37 @@ export async function POST(request, { params }) {
       )
     }
 
+    // BUG-041: il posto si è liberato → promuovi il prossimo dalla waitlist.
+    // Priorità: chi era in lista d'attesa specifica per QUESTO posto, poi la
+    // lista d'attesa generale dell'evento. Best-effort: se fallisce, l'admin
+    // può promuovere a mano da /admin/lista-attesa.
+    let promotedBookingId = null
+    if (booking.event_id && booking.stall_id) {
+      const { data: promoted, error: promoteErr } = await admin.rpc('promote_next_waitlist', {
+        p_event_id: booking.event_id,
+        p_stall_id: booking.stall_id,
+      })
+      if (promoteErr) {
+        safeLogError('[admin/cancel] promote_next_waitlist failed', promoteErr)
+      } else {
+        promotedBookingId = promoted || null
+      }
+    }
+
     try {
       revalidatePath('/admin')
       revalidatePath('/admin/cancellazioni')
+      revalidatePath('/admin/lista-attesa')
       revalidatePath('/profilo')
       if (booking.event_id) revalidatePath(`/evento/${booking.event_id}`)
     } catch (_) {}
 
-    return NextResponse.json({ ok: true, refund_id: refundId, refunded: Boolean(refundId) })
+    return NextResponse.json({
+      ok: true,
+      refund_id: refundId,
+      refunded: Boolean(refundId),
+      waitlist_promoted_booking_id: promotedBookingId,
+    })
   } catch (err) {
     safeLogError('[admin/cancel] unexpected error', err)
     return NextResponse.json({ error: 'unexpected', message: 'Errore del server.' }, { status: 500 })
