@@ -107,6 +107,12 @@ create table if not exists bookings (
   -- Cancellation request flow (BUG-033)
   cancellation_requested_at  timestamptz,
   cancellation_reason        text,
+  -- Waitlist promotion flow (BUG-041): se true, il booking nasce da una
+  -- promozione della lista d'attesa e ha 24h per essere confermato (pagato).
+  -- Scaduto, il cron release_expired_waitlist_promotions lo cancella e
+  -- promuove il successivo dalla lista.
+  from_waitlist              boolean not null default false,
+  waitlist_promoted_at       timestamptz,
   created_at                 timestamptz default now()
 );
 
@@ -120,9 +126,13 @@ create unique index if not exists bookings_one_confirmed_per_stall
   on bookings(stall_id) where status = 'confirmed';
 
 -- 1.5 waitlist — lista d'attesa
+-- stall_id (BUG-041): NULL = lista generale dell'evento, valorizzato = lista
+-- specifica per quel posto. La promozione (`promote_next_waitlist`) da'
+-- priorita' a chi ha targetato lo specifico posto, poi alla lista generale.
 create table if not exists waitlist (
   id           uuid primary key default gen_random_uuid(),
   event_id     uuid not null references events(id) on delete cascade,
+  stall_id     uuid     references stalls(id) on delete cascade,
   user_id      uuid not null references auth.users(id) on delete cascade,
   vendor_name  text not null,
   vendor_phone text,
@@ -134,6 +144,7 @@ create table if not exists waitlist (
 );
 
 create index if not exists waitlist_event_idx on waitlist(event_id, created_at);
+create index if not exists waitlist_stall_idx on waitlist(stall_id) where stall_id is not null;
 
 -- 1.6 audit_log — chi ha fatto cosa
 create table if not exists audit_log (
@@ -404,6 +415,94 @@ begin
   return v_count;
 end;
 $$;
+
+-- 2.9 archive_past_events — auto-archive (BUG-039, vedi 19_)
+-- Cron pg_cron alle 03:15 setta active=false per gli eventi passati.
+create or replace function public.archive_past_events()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare v_count integer;
+begin
+  update events set active = false where active = true and date < current_date;
+  get diagnostics v_count = row_count;
+  return v_count;
+end;
+$$;
+
+-- 2.10 promote_next_waitlist — promozione flow (BUG-041, vedi 19_)
+-- Quando un posto si libera, promuove il primo della lista d'attesa
+-- (priorita' a chi e' iscritto a quel posto specifico, poi lista generale,
+-- FIFO per created_at). Crea booking pending con waitlist_promoted_at=now().
+-- Se l'utente e' al limite (P0001), salta e prova il successivo (ricorsione).
+create or replace function public.promote_next_waitlist(p_event_id uuid, p_stall_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_entry record;
+  v_booking_id uuid;
+begin
+  select * into v_entry from waitlist
+    where event_id = p_event_id and (stall_id = p_stall_id or stall_id is null)
+    order by (case when stall_id = p_stall_id then 0 else 1 end), created_at
+    limit 1;
+  if v_entry.id is null then return null; end if;
+  begin
+    insert into bookings (
+      stall_id, event_id, user_id, vendor_name, vendor_phone, vendor_email,
+      goods_type, status, notes, from_waitlist, waitlist_promoted_at
+    ) values (
+      p_stall_id, p_event_id, v_entry.user_id, v_entry.vendor_name, v_entry.vendor_phone, v_entry.vendor_email,
+      v_entry.goods_type, 'pending', v_entry.notes, true, now()
+    )
+    returning id into v_booking_id;
+  exception
+    when sqlstate 'P0001' then
+      -- Utente al limite booking, rimuovi entry e prova successivo
+      delete from waitlist where id = v_entry.id;
+      return public.promote_next_waitlist(p_event_id, p_stall_id);
+    when unique_violation then
+      -- Stall e' di nuovo occupato (race), abort
+      return null;
+  end;
+  delete from waitlist where id = v_entry.id;
+  return v_booking_id;
+end;
+$$;
+
+-- 2.11 release_expired_waitlist_promotions — GC waitlist (vedi 19_)
+-- Cron orario: cancella i pending da waitlist scaduti (>24h dalla
+-- promozione) e auto-promuove il successivo. Distinto dal GC pending
+-- Stripe (15 min): chi viene promosso ha 24h per pagare perche' la
+-- notifica via email (Resend, futuro) richiede piu' grace period.
+create or replace function public.release_expired_waitlist_promotions()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare v_count integer := 0; r record; promoted uuid;
+begin
+  for r in select id, event_id, stall_id from bookings
+    where status = 'pending' and from_waitlist = true
+      and waitlist_promoted_at < now() - interval '24 hours'
+  loop
+    update bookings set status = 'cancelled' where id = r.id;
+    v_count := v_count + 1;
+    promoted := public.promote_next_waitlist(r.event_id, r.stall_id);
+  end loop;
+  return v_count;
+end;
+$$;
+
+grant execute on function public.archive_past_events()                  to authenticated;
+grant execute on function public.promote_next_waitlist(uuid, uuid)      to authenticated;
+grant execute on function public.release_expired_waitlist_promotions()  to authenticated;
 
 -- ============================================================
 -- 3. VISTE

@@ -28,7 +28,7 @@ export default async function ProfiloPage() {
       .maybeSingle(),
     supabase.from('bookings')
       .select(`
-        id, status, goods_type, created_at,
+        id, status, goods_type, created_at, from_waitlist, waitlist_promoted_at,
         events ( id, title, date, price_per_stall ),
         stalls ( id, label, price )
       `)
@@ -41,11 +41,21 @@ export default async function ProfiloPage() {
   const confirmedBookings = list.filter(b => b.status === 'confirmed').length
 
   const today = new Date().toISOString().slice(0, 10)
+  // BUG-043: la classificazione "passata" ha priorita' su tutti gli altri
+  // stati: se l'evento si e' gia' svolto, non ha senso mostrare "in attesa"
+  // o offrire la cancellazione. Senza questa priorita', i pending creati
+  // (es. da promote_next_waitlist) su eventi appena scaduti restavano
+  // mostrati come "In attesa" con bottone cancellazione cliccabile.
+  // BUG-044: se `events` e' null nel join (evento eliminato/archiviato +
+  // RLS che lo nasconde), trattiamo come 'unknown' / 'past' per non
+  // mostrare placeholder "Evento" senza dati con bottone attivo.
   function classify(b) {
-    if (b.status === 'cancelled')                 return { key: 'cancelled', label: 'Annullata',  color: 'stone' }
-    if (b.events?.date && b.events.date < today)  return { key: 'past',      label: 'Passata',    color: 'stone' }
-    if (b.status === 'pending')                   return { key: 'pending',   label: 'In attesa',  color: 'amber' }
-    return                                              { key: 'active',    label: 'Attiva',     color: 'green' }
+    if (b.status === 'cancelled')                            return { key: 'cancelled', label: 'Annullata',         color: 'stone' }
+    if (!b.events)                                           return { key: 'unknown',   label: 'Evento rimosso',    color: 'stone' }
+    if (b.events.date && b.events.date < today)              return { key: 'past',      label: 'Passata',           color: 'stone' }
+    if (b.status === 'pending' && b.from_waitlist)           return { key: 'pending',   label: 'In attesa (24h)',   color: 'amber' }
+    if (b.status === 'pending')                              return { key: 'pending',   label: 'In attesa',         color: 'amber' }
+    return                                                          { key: 'active',    label: 'Attiva',            color: 'green' }
   }
 
   return (
@@ -90,7 +100,13 @@ export default async function ProfiloPage() {
             {list.map(b => {
               const cls = classify(b)
               const price = b.stalls?.price ?? b.events?.price_per_stall ?? 0
+              // BUG-043: cancellazione richiedibile solo per prenotazioni
+              // attive o pending su eventi futuri. Niente bottone su:
+              // - 'past' (l'evento si e' gia' svolto)
+              // - 'cancelled' (gia' annullata)
+              // - 'unknown' (evento rimosso, niente da cancellare lato user)
               const canRequestCancel = cls.key === 'active' || cls.key === 'pending'
+              const title = b.events?.title || (cls.key === 'unknown' ? 'Evento rimosso' : 'Evento')
               return (
                 <li key={b.id} className="py-3 flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
@@ -99,12 +115,12 @@ export default async function ProfiloPage() {
                         href={`/prenotato/${b.id}`}
                         className="text-sm font-medium text-stone-900 hover:text-amber-700 truncate"
                       >
-                        {b.events?.title || 'Evento'}
+                        {title}
                       </Link>
                       <Badge color={cls.color} label={cls.label} />
                     </div>
                     <div className="text-xs text-stone-500 space-y-0.5">
-                      <div>📅 {formatDate(b.events?.date)}</div>
+                      <div>📅 {b.events?.date ? formatDate(b.events.date) : '—'}</div>
                       <div>📍 Posteggio <span className="font-mono">{b.stalls?.label || '—'}</span> · {b.goods_type}</div>
                       <div>💶 {price}€</div>
                     </div>

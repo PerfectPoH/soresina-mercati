@@ -1,6 +1,6 @@
 ---
 tipo: index
-ultimo-aggiornamento: 2026-04-26
+ultimo-aggiornamento: 2026-04-28
 ---
 
 # 🗂️ INDICE — Vault Mercati Soresina

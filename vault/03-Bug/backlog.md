@@ -5,7 +5,7 @@ ultimo-aggiornamento: 2026-04-26
 
 # Backlog dei Bug
 
-> 🟢 **0 bug critici aperti.** BUG-038..041 + audit Codex 27 apr (BUG-027 reale fix, GOODS_TYPES residuo, accessibility/lint warnings) chiusi nella sessione 2026-04-27 (Opus). Restano solo 4 tech-debt non bloccanti.
+> 🟢 **0 bug critici aperti.** BUG-042..044 + audit Codex 28 apr (schema.sql allineato, README/SECURITY riallineati) chiusi nella sessione 2026-04-28 (Opus). Restano solo 4 tech-debt non bloccanti.
 >
 > 📚 Storia completa di BUG-001 → BUG-025 (con cause, fix, motivazioni di chiusura) è in [[Bug-Risolti-Storico]] (in `_archive`).
 
@@ -17,7 +17,44 @@ ultimo-aggiornamento: 2026-04-26
 
 ---
 
-## 🆕 Bug risolti in questa sessione (27 Apr, Opus)
+## 🆕 Bug risolti in questa sessione (28 Apr, Opus)
+
+### BUG-042 — Promote waitlist su evento passato
+- **Sintomo**: l'admin promuoveva un utente della lista d'attesa su un evento passato/archiviato → booking creato come `pending` impossibile da confermare (bloccato dai check `event_past` su `/api/book` e nel webhook) → restava "in attesa" all'infinito.
+- **Causa**: `promote_next_waitlist(uuid, uuid)` non verificava lo stato dell'evento.
+- **Fix DB** (migration 20): pre-check `events.active = true AND events.date >= current_date` all'inizio della funzione. Cleanup idempotente che cancella i bookings pending residui creati da promote su eventi non più validi.
+- **Fix API** `app/api/admin/waitlist/[id]/promote/route.js`: defense-in-depth, errore esplicito 400 `event_past_or_archived` se l'admin prova a promuovere su un evento non valido.
+- **Stato**: ✅ RISOLTO
+
+### BUG-043 — Profilo: bottone "Richiedi cancellazione" attivo su eventi passati
+- **Sintomo**: utente vedeva il bottone "Richiedi cancellazione" su prenotazioni di mercati già conclusi.
+- **Fix UI** `app/profilo/page.js`: la `classify` ora valuta lo stato dell'evento PRIMA del booking status. Eventi passati → badge "Passata" (no bottone). Eventi rimossi/RLS-nascosti → badge "Evento rimosso" (no bottone).
+- **Fix DB** (migration 21): `request_booking_cancellation` rifiuta lato server se l'evento è passato (defense in depth contro chiamate dirette all'RPC).
+- **Stato**: ✅ RISOLTO
+
+### BUG-044 — Profilo: "Evento" senza nome/data per prenotazioni promosse su eventi archiviati
+- **Sintomo**: dopo BUG-042, un booking pending residuo aveva `events` null nel join (RLS nasconde events inactive ai non-admin) → UI mostrava placeholder "Evento" 0€ senza data.
+- **Causa root**: BUG-042 (promote su evento passato).
+- **Fix UI**: gestione gracefully — `classify` ritorna `'unknown'` con label "Evento rimosso", titolo fallback "Evento rimosso", data "—". Niente bottone cancellazione su prenotazioni con evento mancante.
+- **Cleanup runtime**: migration 20 ha già messo i bookings pending orfani in `cancelled`.
+- **Stato**: ✅ RISOLTO (sintomo eliminato dal fix BUG-042)
+
+---
+
+## 🩺 Audit Codex 28 Apr — chiusura P1
+
+### `supabase/schema.sql` allineato alle migrations 13-21
+- Aggiunti `bookings.from_waitlist` + `bookings.waitlist_promoted_at` + `waitlist.stall_id` + funzioni `archive_past_events`, `promote_next_waitlist`, `release_expired_waitlist_promotions` nel dump consolidato.
+- Bootstrap su nuovo Supabase project ora coerente: schema.sql + le 7 migration in `supabase/migrations/` (13 → 21).
+
+### `README.md` riallineato
+- Sezione "Funzionalità implementate" con checklist `[x]` reale: auth, Stripe, cancellazioni, waitlist, mappa satellitare, GDPR, Sentry, staging.
+- Sezione "Roadmap aperta" ridotta a 3 voci reali (Resend, dominio, notifica admin).
+- Aggiunta sezione "Bootstrap database" con sequenza schema.sql + migrations + Supabase Auth config.
+
+---
+
+## 🆕 Bug risolti in sessione (27 Apr, Opus)
 
 ### BUG-038 — Admin mostrava prenotazioni di mercati passati con bottone "Annulla"
 - **Sintomo**: dashboard admin elencava bookings di eventi conclusi e permetteva di annullarle (distorcendo storico/statistiche).

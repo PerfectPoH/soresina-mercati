@@ -32,10 +32,10 @@ export async function POST(request, { params }) {
 
     const admin = createSupabaseAdminClient()
 
-    // Carica l'entry waitlist
+    // Carica l'entry waitlist + i dati dell'evento per il check.
     const { data: entry, error: loadErr } = await admin
       .from('waitlist')
-      .select('id, event_id, stall_id, user_id, vendor_name')
+      .select('id, event_id, stall_id, user_id, vendor_name, events ( date, active )')
       .eq('id', params.id)
       .maybeSingle()
     if (loadErr) {
@@ -44,6 +44,17 @@ export async function POST(request, { params }) {
     }
     if (!entry) {
       return NextResponse.json({ error: 'not_found', message: 'Iscrizione non trovata.' }, { status: 404 })
+    }
+
+    // BUG-042: difesa in profondita' contro promote su eventi passati
+    // (la funzione DB rifiuta gia', ma diamo un errore chiaro alla UI).
+    const todayIso = new Date().toISOString().slice(0, 10)
+    const ev       = entry.events
+    if (!ev || !ev.active || (ev.date && ev.date < todayIso)) {
+      return NextResponse.json(
+        { error: 'event_past_or_archived', message: 'Non puoi promuovere su un evento passato o archiviato. Rimuovi l\'iscrizione invece.' },
+        { status: 400 }
+      )
     }
 
     // Decidi lo stall: se entry.stall_id e' valorizzato, usalo. Se non lo è,

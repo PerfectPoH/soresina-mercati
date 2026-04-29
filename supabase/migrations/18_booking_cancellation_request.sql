@@ -29,6 +29,13 @@ begin
   if v_owner is null then return false; end if;
   if v_owner <> v_uid then return false; end if;
   if v_status not in ('confirmed','pending') then return false; end if;
+  -- BUG-043: niente cancellazione su eventi passati (rifiutiamo lato DB
+  -- anche se UI nasconde il bottone, per difesa contro chiamate dirette).
+  if exists (
+    select 1 from bookings b
+    join events e on e.id = b.event_id
+    where b.id = p_booking_id and e.date < current_date
+  ) then return false; end if;
   update bookings
     set cancellation_requested_at = coalesce(cancellation_requested_at, now()),
         cancellation_reason       = nullif(trim(coalesce(p_reason,'')), '')
