@@ -30,6 +30,11 @@ export async function POST(request, { params }) {
 
     const body = await request.json().catch(() => ({}))
     const refund = body.refund !== false  // default true
+    // BUG-045: l'admin può fornire un motivo che viene salvato e mostrato
+    // all'utente nel suo profilo (e tramite email quando Resend sarà attivo).
+    const adminReason = typeof body.reason === 'string'
+      ? body.reason.trim().slice(0, 500)
+      : ''
 
     const supabase = createSupabaseServerClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -82,10 +87,16 @@ export async function POST(request, { params }) {
       }
     }
 
-    // 2. Aggiorna status booking
+    // 2. Aggiorna status booking + traccia motivo/rimborso/data per
+    // farli vedere all'utente nel profilo.
     const { error: updErr } = await admin
       .from('bookings')
-      .update({ status: 'cancelled' })
+      .update({
+        status:               'cancelled',
+        admin_cancel_reason:  adminReason || null,
+        admin_refunded:       Boolean(refundId),
+        admin_cancelled_at:   new Date().toISOString(),
+      })
       .eq('id', params.id)
     if (updErr) {
       safeLogError('[admin/cancel] update booking failed', updErr)

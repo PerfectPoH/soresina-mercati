@@ -15,14 +15,30 @@ NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY
 ```
 
-La `service_role` key **non deve mai** essere messa in `.env.local`
-ne' in variabili `NEXT_PUBLIC_*`. Tutte le operazioni privilegiate
-passano dalla RLS + dalla sessione dell'utente admin autenticato,
-quindi non serve la service key in questa app.
+La `service_role` key **non deve mai** essere messa in variabili
+`NEXT_PUBLIC_*` ne' esposta al browser.
 
-Se in futuro si aggiunge, tenerla in:
-- `SUPABASE_SERVICE_ROLE_KEY` (niente prefisso `NEXT_PUBLIC_`)
-- Leggibile solo in route handler / server component, mai nel client.
+**Oggi viene usata davvero** (non era in piano inizialmente). I casi sono
+tutti server-to-server, dove la sessione utente non esiste:
+- Webhook Stripe (`app/api/webhooks/stripe/route.js`): aggiorna `bookings`
+  da `pending` a `confirmed` dopo il pagamento. Senza service role, RLS
+  bloccava l'update perche' non c'e' `auth.uid()` nelle chiamate da Stripe.
+- Cancellazione admin con rimborso (`app/api/admin/bookings/[id]/cancel/route.js`)
+  e promozione waitlist (`app/api/admin/waitlist/[id]/promote/route.js`):
+  scritture privilegiate orchestrate da admin loggati ma con bypass RLS
+  controllato per coerenza.
+- Free-booking flow in `app/api/book/route.js` (eventi gratuiti): l'update
+  `pending → confirmed` viene fatto subito senza Stripe, e per gli stessi
+  motivi della webhook richiede il bypass RLS.
+
+Convenzioni operative:
+- Variabile env `SUPABASE_SERVICE_ROLE_KEY` (mai `NEXT_PUBLIC_*`).
+- Singolo client centralizzato in `lib/supabase-admin.js` con
+  `{ persistSession: false, autoRefreshToken: false }`.
+- Usato esclusivamente in route handler server-side e cron;
+  mai in client component, mai in middleware esposto al browser.
+- Su Vercel e' configurato sia in scope `Production` (chiave del project
+  prod) sia in `Preview` (chiave del project staging).
 
 ## 2. RLS (Row Level Security)
 

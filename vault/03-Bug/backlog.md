@@ -5,7 +5,7 @@ ultimo-aggiornamento: 2026-04-26
 
 # Backlog dei Bug
 
-> 🟢 **0 bug critici aperti.** BUG-042..044 + audit Codex 28 apr (schema.sql allineato, README/SECURITY riallineati) chiusi nella sessione 2026-04-28 (Opus). Restano solo 4 tech-debt non bloccanti.
+> 🟢 **0 bug critici aperti.** BUG-045 (motivo cancellazione admin → utente) + BUG-046 (utente promosso da waitlist può completare pagamento) chiusi nella sessione 2026-04-28 sera (Opus). Codex 28 apr P1/P2 chiusi (README migrations 13→21, SECURITY.md service_role allineato, UX prenotato/[id] distinta variant pending). Restano solo 4 tech-debt non bloccanti.
 >
 > 📚 Storia completa di BUG-001 → BUG-025 (con cause, fix, motivazioni di chiusura) è in [[Bug-Risolti-Storico]] (in `_archive`).
 
@@ -17,7 +17,27 @@ ultimo-aggiornamento: 2026-04-26
 
 ---
 
-## 🆕 Bug risolti in questa sessione (28 Apr, Opus)
+## 🆕 Bug risolti in questa sessione (28 Apr sera, Opus)
+
+### BUG-045 — Motivo cancellazione admin non comunicato all'utente
+- **Sintomo**: l'admin annulla una prenotazione (con o senza rimborso) e l'utente non riceve nessuna spiegazione.
+- **Fix DB** (migration 22): aggiunte colonne `bookings.admin_cancel_reason text`, `admin_refunded boolean`, `admin_cancelled_at timestamptz`.
+- **Fix UI admin** `components/AdminCancellationActions.jsx`: prompt obbligatorio del motivo prima di confermare l'azione (non si procede se vuoto). Il motivo viene mostrato nella conferma per evitare clic accidentali.
+- **Fix API** `POST /api/admin/bookings/[id]/cancel`: accetta `body.reason` (max 500 char), salva con `admin_cancel_reason`, `admin_refunded`, `admin_cancelled_at`.
+- **Fix UI utente**: profilo (`app/profilo/page.js`) mostra il box "Annullata dall'organizzazione" con motivo + indicazione rimborso emesso/no, e idem nella pagina conferma `/prenotato/[id]`.
+- **Email**: integrazione Resend in coda (BUG-040). I dati sono già pronti per il template.
+- **Stato**: ✅ RISOLTO
+
+### BUG-046 — Utente promosso da waitlist non poteva completare la prenotazione
+- **Sintomo**: l'admin promuove un utente dalla waitlist → il booking viene creato come `pending` (giallo) → l'utente lo vede nel profilo ma non ha modo di pagarlo o confermarlo (per gli eventi gratuiti). Restava in pending fino allo scadere delle 24h.
+- **Fix API**: nuovo endpoint `POST /api/bookings/[id]/complete`:
+  - Verifica ownership + stato `pending` + evento attivo/futuro
+  - Se prezzo = 0 → conferma immediata via admin client (bypass RLS)
+  - Se prezzo > 0 → crea nuova Stripe Checkout session con `metadata.booking_id` puntando al booking esistente, success/cancel URL su `/prenotato/[id]`
+- **Fix UI**: nuovo componente client `CompleteBookingButton.jsx` con label dinamica ("Conferma prenotazione" se gratuito, "Completa il pagamento" se a pagamento). Mostrato:
+  - In `app/prenotato/[id]/page.js` quando il variant è `pending` (sotto l'hero)
+  - In `app/profilo/page.js` accanto a ogni booking pending (sostituisce il bottone "Richiedi cancellazione" finché è pending)
+- **Stato**: ✅ RISOLTO
 
 ### BUG-042 — Promote waitlist su evento passato
 - **Sintomo**: l'admin promuoveva un utente della lista d'attesa su un evento passato/archiviato → booking creato come `pending` impossibile da confermare (bloccato dai check `event_past` su `/api/book` e nel webhook) → restava "in attesa" all'infinito.

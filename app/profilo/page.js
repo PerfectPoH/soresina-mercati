@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import DeleteAccountButton from '@/components/DeleteAccountButton'
 import RequestBookingCancellation from '@/components/RequestBookingCancellation'
+import CompleteBookingButton from '@/components/CompleteBookingButton'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -29,6 +30,7 @@ export default async function ProfiloPage() {
     supabase.from('bookings')
       .select(`
         id, status, goods_type, created_at, from_waitlist, waitlist_promoted_at,
+        admin_cancel_reason, admin_refunded, admin_cancelled_at,
         events ( id, title, date, price_per_stall ),
         stalls ( id, label, price )
       `)
@@ -124,10 +126,26 @@ export default async function ProfiloPage() {
                       <div>📍 Posteggio <span className="font-mono">{b.stalls?.label || '—'}</span> · {b.goods_type}</div>
                       <div>💶 {price}€</div>
                     </div>
+                    {/* BUG-045: motivo annullamento admin (con eventuale rimborso) */}
+                    {b.admin_cancel_reason && (
+                      <div className="mt-2 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs">
+                        <div className="font-medium text-stone-700 mb-0.5">
+                          Annullata dall'organizzazione
+                          {b.admin_refunded ? ' · rimborso emesso' : ' · senza rimborso'}
+                        </div>
+                        <div className="text-stone-600">Motivo: <span className="italic">"{b.admin_cancel_reason}"</span></div>
+                      </div>
+                    )}
                   </div>
-                  {canRequestCancel && (
-                    <RequestBookingCancellation bookingId={b.id} />
-                  )}
+                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    {/* BUG-046: per i pending mostriamo "Completa pagamento"/"Conferma" */}
+                    {cls.key === 'pending' && (
+                      <CompleteBookingButton bookingId={b.id} isFree={Number(price) === 0} />
+                    )}
+                    {canRequestCancel && cls.key !== 'pending' && (
+                      <RequestBookingCancellation bookingId={b.id} />
+                    )}
+                  </div>
                 </li>
               )
             })}

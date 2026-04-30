@@ -113,6 +113,12 @@ create table if not exists bookings (
   -- promuove il successivo dalla lista.
   from_waitlist              boolean not null default false,
   waitlist_promoted_at       timestamptz,
+  -- Admin force-cancel flow (BUG-045): motivo + se rimborsato + quando.
+  -- Distinto da cancellation_reason (che e' invece il motivo passato
+  -- dall'utente quando RICHIEDE la cancellazione).
+  admin_cancel_reason        text,
+  admin_refunded             boolean,
+  admin_cancelled_at         timestamptz,
   created_at                 timestamptz default now()
 );
 

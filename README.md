@@ -72,7 +72,7 @@ Aggiungi le variabili d'ambiente nel pannello Vercel → Settings → Environmen
 ## Bootstrap database (nuovo project Supabase)
 
 1. Esegui `supabase/schema.sql` nell'SQL Editor (stato consolidato: tabelle, view, funzioni, RLS, realtime)
-2. Esegui in ordine i file in `supabase/migrations/` (numerati 13 → 19)
+2. Esegui in ordine i file in `supabase/migrations/` (numerati 13 → 21)
 3. `supabase/migrations-archive/` contiene lo storico 02-09 già assorbito in `schema.sql` — riferimento, non rieseguire
 4. Configura le env Vercel come da `.env.example`
 5. Imposta Supabase Auth → Email provider: min length 10, lowercase + uppercase + digits + symbols

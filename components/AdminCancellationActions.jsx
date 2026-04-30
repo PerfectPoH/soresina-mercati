@@ -11,9 +11,22 @@ export default function AdminCancellationActions({ bookingId, hasPaymentIntent }
   const [error,   setError]   = useState(null)
 
   async function approve(refund) {
+    // BUG-045: chiediamo SEMPRE un motivo all'admin. Verra' salvato sul
+    // booking e (in futuro con Resend) inviato via email all'utente.
+    const reasonPrompt = refund
+      ? 'Motivo dell\'annullamento (verrà mostrato all\'utente):'
+      : 'Motivo dell\'annullamento SENZA rimborso (verrà mostrato all\'utente):'
+    const reason = window.prompt(reasonPrompt, '')
+    if (reason === null) return  // user clicked Cancel
+    const trimmed = reason.trim()
+    if (!trimmed) {
+      alert('Devi inserire un motivo prima di procedere.')
+      return
+    }
+
     if (!confirm(refund
-      ? 'Confermi annullamento + rimborso Stripe automatico?'
-      : 'Confermi annullamento SENZA rimborso? Da usare solo se non c\'è pagamento o vuoi gestirlo a mano.'
+      ? `Confermi annullamento + rimborso Stripe automatico?\nMotivo: "${trimmed}"`
+      : `Confermi annullamento SENZA rimborso?\nMotivo: "${trimmed}"`
     )) return
 
     setLoading(true); setError(null)
@@ -21,7 +34,7 @@ export default function AdminCancellationActions({ bookingId, hasPaymentIntent }
       const res = await fetch(`/api/admin/bookings/${bookingId}/cancel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refund }),
+        body: JSON.stringify({ refund, reason: trimmed }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.message || 'Errore')

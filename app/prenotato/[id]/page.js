@@ -2,6 +2,7 @@ import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { safeLogError } from '@/lib/log'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
+import CompleteBookingButton from '@/components/CompleteBookingButton'
 
 // Pagina di conferma post-prenotazione.
 // Flusso:
@@ -35,7 +36,9 @@ async function getBookingWithContext(bookingId) {
     .select(`
       id, stall_id, event_id, user_id, status,
       vendor_name, vendor_phone, vendor_email, goods_type, notes, created_at,
-      events ( id, title, date, location, description, price_per_stall ),
+      from_waitlist, waitlist_promoted_at,
+      admin_cancel_reason, admin_refunded, admin_cancelled_at,
+      events ( id, title, date, location, description, price_per_stall, active ),
       stalls ( id, label, price, row_idx, col_idx )
     `)
     .eq('id', bookingId)
@@ -74,6 +77,13 @@ function formatDate(dateStr) {
   })
 }
 
+function formatDeadline(d) {
+  if (!d) return ''
+  return d.toLocaleString('it-IT', {
+    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+  })
+}
+
 export default async function PrenotatoPage({ params }) {
   const res = await getBookingWithContext(params.id)
 
@@ -88,40 +98,89 @@ export default async function PrenotatoPage({ params }) {
   const stall = booking.stalls
   const price = stall?.price ?? ev?.price_per_stall
   const isCancelled = booking.status === 'cancelled'
+  // Pending Stripe (15 min) o pending da waitlist (24h): UX distinta
+  // dalla "Prenotazione confermata!" per evitare false promesse all'utente.
+  const isPending   = booking.status === 'pending'
+  const isFromWaitlist = !!booking.from_waitlist
+  // Variant ui: cancelled / pending / confirmed
+  const variant = isCancelled ? 'cancelled' : (isPending ? 'pending' : 'confirmed')
 
   // Breve codice di riferimento: ultime 8 char dell'uuid maiuscole
   const refCode = String(booking.id).replace(/-/g, '').slice(-8).toUpperCase()
+
+  // Calcolo deadline pagamento per pending (informativa, non binding)
+  const promotedAt = booking.waitlist_promoted_at ? new Date(booking.waitlist_promoted_at) : null
+  const deadline   = promotedAt ? new Date(promotedAt.getTime() + 24 * 3600 * 1000) : null
 
   return (
     <div className="max-w-xl mx-auto">
       {/* Hero conferma */}
       <div className={`rounded-2xl p-6 sm:p-8 text-center border ${
-        isCancelled
-          ? 'bg-stone-50 border-stone-200'
-          : 'bg-green-50 border-green-200'
+        variant === 'cancelled' ? 'bg-stone-50 border-stone-200' :
+        variant === 'pending'   ? 'bg-amber-50 border-amber-200'  :
+                                  'bg-green-50 border-green-200'
       }`}>
         <div
           className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center text-3xl ${
-            isCancelled
-              ? 'bg-stone-200 text-stone-500'
-              : 'bg-green-500 text-white'
+            variant === 'cancelled' ? 'bg-stone-200 text-stone-500' :
+            variant === 'pending'   ? 'bg-amber-200 text-amber-800' :
+                                      'bg-green-500 text-white'
           }`}
           aria-hidden="true"
         >
-          {isCancelled ? '×' : '✓'}
+          {variant === 'cancelled' ? '×' : variant === 'pending' ? '⏳' : '✓'}
         </div>
-        <h1 className={`text-2xl font-medium mb-1 ${isCancelled ? 'text-stone-700' : 'text-green-900'}`}>
-          {isCancelled ? 'Prenotazione annullata' : 'Prenotazione confermata!'}
+        <h1 className={`text-2xl font-medium mb-1 ${
+          variant === 'cancelled' ? 'text-stone-700' :
+          variant === 'pending'   ? 'text-amber-900' :
+                                    'text-green-900'
+        }`}>
+          {variant === 'cancelled' ? 'Prenotazione annullata'
+            : variant === 'pending' ? (isFromWaitlist ? 'In attesa di pagamento' : 'Pagamento in corso')
+            : 'Prenotazione confermata!'}
         </h1>
-        <p className={`text-sm ${isCancelled ? 'text-stone-500' : 'text-green-700'}`}>
-          {isCancelled
+        <p className={`text-sm ${
+          variant === 'cancelled' ? 'text-stone-500' :
+          variant === 'pending'   ? 'text-amber-800' :
+                                    'text-green-700'
+        }`}>
+          {variant === 'cancelled'
             ? 'Questa prenotazione e\' stata annullata.'
-            : 'Il tuo posteggio e\' riservato. Salva il codice di prenotazione qui sotto.'}
+            : variant === 'pending'
+              ? (isFromWaitlist
+                  ? `Il posto e\' tuo se completi il pagamento entro 24h${deadline ? ` (entro ${formatDeadline(deadline)})` : ''}. Trascorso questo tempo viene riassegnato al successivo in lista.`
+                  : 'Stiamo aspettando la conferma del pagamento. Se non viene completato entro 15 minuti, il posto torna libero.'
+                )
+              : 'Il tuo posteggio e\' riservato. Salva il codice di prenotazione qui sotto.'}
         </p>
         <div className="mt-4 text-xs text-stone-400">
           Codice prenotazione: <span className="font-mono text-stone-600">{refCode}</span>
         </div>
       </div>
+
+      {/* BUG-046: bottone "Completa il pagamento" / "Conferma" per i
+          booking pending. Permette all'utente promosso da waitlist (o con
+          checkout abbandonato) di completare la prenotazione senza dover
+          rifare il flusso da zero. */}
+      {variant === 'pending' && (
+        <div className="mt-6 flex justify-center">
+          <CompleteBookingButton
+            bookingId={booking.id}
+            isFree={Number(price) === 0}
+          />
+        </div>
+      )}
+
+      {/* BUG-045: motivo cancellazione admin (con/senza rimborso) */}
+      {variant === 'cancelled' && booking.admin_cancel_reason && (
+        <div className="mt-6 rounded-2xl border border-stone-200 bg-stone-50 p-5">
+          <div className="text-sm font-medium text-stone-700 mb-1">
+            Annullata dall'organizzazione
+            {booking.admin_refunded ? ' · rimborso emesso' : ' · senza rimborso'}
+          </div>
+          <p className="text-sm text-stone-600 italic">"{booking.admin_cancel_reason}"</p>
+        </div>
+      )}
 
       {/* Riepilogo dettagli */}
       <div className="mt-6 bg-white border border-stone-200 rounded-2xl overflow-hidden">
