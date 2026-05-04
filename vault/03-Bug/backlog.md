@@ -81,6 +81,25 @@ ultimo-aggiornamento: 2026-05-04
 - **Fix**: spostato `formatDate` dentro `ProfileBookingCard.jsx` (gia' `'use client'`). Rimossa la prop dal call site (3 occorrenze). `formatDate` resta nel server component per uso interno (`hint={formatDate(...)}`, `<Field value={formatDate(...)}/>`).
 - **Stato**: ✅ RISOLTO. Da pushare staging per verifica preview Vercel.
 
+### Redesign /evento/[id] (Sessione 3 di [[Plan-Redesign-Incrementale]])
+- Header Müller-Brockmann split-grid: data XL "12 / MAG" Fraunces a sinistra, titolo + descrizione a destra, border-bottom.
+- Image_url spostata sotto come "evidence" invece di hero overlay.
+- Info grid 2x2/4x1: Data / Luogo / Prezzo / Posti.
+- Occupancy bar warm gradient + pill stato posteggi sopra la mappa.
+- Mappa resta l'eroe della pagina.
+
+### Redesign /admin (Sessione 4 di [[Plan-Redesign-Incrementale]])
+- Header H1 Fraunces "Dashboard" + kicker uppercase, CTA "+ Nuovo evento" a destra.
+- Nav sub-header con divider sottile invece di pill, link rosso + badge per cancellazioni urgenti.
+- Banner urgente subito sotto: "N richieste di cancellazione da gestire" + CTA "Gestisci →".
+- KPI strip Linear-style: tile su griglia stone gap-px, numeri 2xl-3xl Fraunces tabular, accent ambra solo su Incasso.
+
+### Refresh /prenotato/[id] (Sessione 5 di [[Plan-Redesign-Incrementale]])
+- Hero ariosa con titolo Fraunces 3xl-4xl ("Prenotazione confermata.").
+- Indicator dot ring (cerchio outer + inner con SVG check/clock/cross) invece di emoji.
+- Codice prenotazione font-mono tracking-wider sotto l'hero.
+- Bottoni azione con SVG inline (calendar, map) al posto delle emoji 📅 🗺.
+
 ### Redesign homepage `/` (Sessione 2 di [[Plan-Redesign-Incrementale]])
 - Hero filosofia Kenya Hara: titolo Fraunces 5xl-6xl-7xl con `Soresina` in italic ambra come accent unico, kicker uppercase tracking-wide, padding-top/bottom abbondante (96px+), una sola CTA (no badge "Prenotazioni aperte" + "Sei un venditore?" → spostato in fondo come link discreto).
 - Event card Stamen-style nuova (`HomeEventCard.jsx`): aggiunta progress bar warm gradient amber-300→500 per posti occupati, contatore `freeCount/totalCount` tabular, stagger reveal Framer Motion (delay 0.08s × index).

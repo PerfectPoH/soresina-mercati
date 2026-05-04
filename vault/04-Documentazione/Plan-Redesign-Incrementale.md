@@ -36,6 +36,40 @@ Niente big-bang: ogni step è un commit separato, deployabile da solo, rollbacka
 
 ---
 
+## Sessione 3 (FATTA — 2026-05-04)
+### `/evento/[id]` — Müller-Brockmann grid + map focus ✅
+- Header split: data XL "12 / MAG" Fraunces a sinistra (col 2-3 di 12), titolo + meta a destra. Border-bottom invece di hero immagine.
+- Image_url spostata SOTTO l'header come "evidence" (era hero), no overlay scuro.
+- Info grid 2x2/4x1: Data / Luogo / Prezzo / Posti — celle bianche su griglia stone, label uppercase tracking-wider, value Inter medium.
+- Occupancy bar warm gradient sopra le pill di stato posteggi (riepilogo prima della mappa).
+- Banner past + waitlist invariati (solo class refresh).
+- Mappa stalls resta l'eroe sotto.
+
+**File toccati**: `app/evento/[id]/page.js` (riscritto, 280 righe).
+
+## Sessione 4 (FATTA — 2026-05-04)
+### `/admin` — Pentagram density ✅
+- Header split: H1 Fraunces "Dashboard" + kicker "Gestione mercati · Pro Loco Soresina" uppercase, a destra "+ Nuovo evento" CTA primaria.
+- Nav sub-header: link orizzontali con divider sottile (era pill bordate). "Cancellazioni" diventa rossa con badge se `cancelRequests > 0`.
+- Banner urgente: card rossa subito sotto l'header che mostra "N richieste di cancellazione da gestire" + CTA "Gestisci →" — top priority operativa.
+- KPI strip Linear-style: 4 tile su griglia stone (gap-px), numeri 2xl-3xl Fraunces tabular, label uppercase mini, accent ambra solo su "Incasso stimato".
+- Sezioni eventi/booking invariate ma label uppercase tracking-wider.
+
+**File toccati**: `app/admin/page.js` (riscritto, 195 righe).
+
+## Sessione 5 (FATTA — 2026-05-04)
+### `/prenotato/[id]` — Sagmeister micro-celebration ✅
+- Hero più ariosa (padding 8/10), titolo Fraunces 3xl-4xl con punto finale ("Prenotazione confermata.").
+- Indicator dot ring: cerchio outer 80x80 a opacity 60% + cerchio inner 48x48 con SVG check/clock/cross stroke 2-3px (no emoji ⏳ ✓ ×).
+- Codice prenotazione spostato a piè dell'hero, font-mono tracking-wider.
+- Riepilogo card: header con price tabular nell'angolo destro, label uppercase tracking-wider mini.
+- Bottoni azione: emoji 📅 🗺 sostituite con SVG inline (calendar, map).
+- Box "Cosa fare ora" con label uppercase mini header.
+
+**File toccati**: `app/prenotato/[id]/page.js` (riscritto, 282 righe).
+
+---
+
 ## Sessione 2 originale (proposta superata)
 ### `/` (homepage) — Kenya Hara hero + Stamen card
 **Filosofia di riferimento**: Kenya Hara minimalism per l'hero, Stamen per le event card.

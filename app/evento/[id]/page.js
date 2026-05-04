@@ -35,8 +35,6 @@ async function getStalls(eventId) {
 }
 
 // Legge la sessione + profilo vendor lato server (cookie httpOnly).
-// Questi valori vengono passati a StallMap/BookingForm come prop,
-// cosi' il client non deve fare getSession da zero.
 async function getCurrentVendor() {
   try {
     const supa = createSupabaseServerClient()
@@ -59,10 +57,6 @@ async function getCurrentVendor() {
   }
 }
 
-// Info lista d'attesa: iscrizione dell'utente + posizione + totale.
-// Nota: la RLS limita la visibilita' delle righe, quindi il totale
-// riflette solo cio' che il vendor puo' vedere (ci basta per sapere
-// se e' iscritto). L'admin vede tutto dalla dashboard dedicata.
 async function getWaitlistInfo(eventId, userId) {
   if (!userId) return { currentEntry: null, position: null, totalEntries: 0 }
   try {
@@ -93,6 +87,13 @@ function formatDate(dateStr) {
   })
 }
 
+function formatShortDate(dateStr) {
+  const d = new Date(dateStr)
+  const day   = d.toLocaleDateString('it-IT', { day: 'numeric' })
+  const month = d.toLocaleDateString('it-IT', { month: 'short' }).replace('.', '')
+  return { day, month: month.toUpperCase() }
+}
+
 export default async function EventoPage({ params }) {
   const event  = await getEvent(params.id)
   if (!event) notFound()
@@ -109,103 +110,88 @@ export default async function EventoPage({ params }) {
   const isFull    = freeCount === 0 && stalls.length > 0
   const isAdmin   = vendor?.role === 'admin'
 
-  // BUG-037: evento passato → niente prenotazione, niente waitlist.
-  // Confronto YYYY-MM-DD: la data dell'evento e' un date PostgreSQL,
-  // confrontiamo a livello calendario.
   const todayIso  = new Date().toISOString().slice(0, 10)
   const isPast    = event.date < todayIso
 
-  // Carica info waitlist solo quando serve (evento pieno, non admin, non passato)
   const waitlist = (isFull && !isAdmin && !isPast)
     ? await getWaitlistInfo(event.id, user?.id)
     : null
 
+  const { day, month } = formatShortDate(event.date)
+  const occupancy = stalls.length > 0
+    ? Math.round((bookedCount / stalls.length) * 100)
+    : 0
+
   return (
     <div>
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm text-stone-400 mb-6">
-        <Link href="/" className="hover:text-stone-600 transition-colors">Mercati</Link>
-        <span>/</span>
-        <span className="text-stone-700">{event.title}</span>
+      <div className="flex items-center gap-2 text-xs text-stone-400 mb-6">
+        <Link href="/" className="hover:text-stone-600 transition-colors no-underline">Mercati</Link>
+        <span aria-hidden="true">/</span>
+        <span className="text-stone-700 truncate">{event.title}</span>
       </div>
 
-      {/* Hero evento. Due varianti:
-          - Con immagine: hero grande (h-80 sm, 96 lg) con gradient overlay
-            in basso e titolo sovrapposto. Fa il feel "rivista"/brochure.
-          - Senza immagine: header classico con background crema, titolo serif.
-          La chip data resta visibile in entrambi i casi. */}
-      {event.image_url ? (
-        <div className="mb-8 relative rounded-2xl overflow-hidden border border-stone-200 shadow-warm-lg">
+      {/*
+        Hero filosofia Müller-Brockmann: griglia disciplinata, dati come decoro.
+        Layout split: data XL a sinistra (Fraunces), titolo + meta a destra.
+        Niente immagine sopra, niente badge: la mappa sotto e' l'eroe.
+        Se c'e' image_url la mostriamo dopo la sezione info come "evidence".
+      */}
+      <header className="mb-10 grid grid-cols-12 gap-6 items-start border-b border-stone-200 pb-8">
+        <div className="col-span-12 sm:col-span-3 lg:col-span-2">
+          <div className="font-display tracking-tight">
+            <div className="text-6xl sm:text-7xl text-amber-brand leading-none tabular-nums">{day}</div>
+            <div className="text-sm text-stone-500 uppercase tracking-[0.2em] mt-1">{month}</div>
+          </div>
+        </div>
+        <div className="col-span-12 sm:col-span-9 lg:col-span-10">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-stone-400 mb-2">
+            {formatDate(event.date)}
+          </p>
+          <h1 className="font-display font-medium text-3xl sm:text-4xl lg:text-5xl text-stone-900 leading-[1.05] tracking-tight">
+            {event.title}
+          </h1>
+          {event.description && (
+            <p className="mt-4 text-stone-600 text-base sm:text-lg leading-relaxed max-w-2xl">
+              {event.description}
+            </p>
+          )}
+        </div>
+      </header>
+
+      {/* Image (se presente) — sotto l'header come "evidence" non come hero */}
+      {event.image_url && (
+        <div className="mb-8 rounded-2xl overflow-hidden border border-stone-200 shadow-warm">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={event.image_url}
             alt=""
             loading="eager"
             decoding="async"
-            className="w-full h-72 sm:h-80 lg:h-[26rem] object-cover"
+            className="w-full h-56 sm:h-72 object-cover"
           />
-          {/* Gradient overlay + testo sovrapposto in basso.
-              pointer-events-none in modo che un eventuale click "buchi"
-              verso eventuali bottoni sotto l'hero (qui non ce ne sono,
-              ma e' abitudine safe). */}
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              background:
-                'linear-gradient(to top, rgba(28,25,23,0.80) 0%, rgba(28,25,23,0.25) 45%, rgba(28,25,23,0) 65%)',
-            }}
-            aria-hidden="true"
-          />
-          <div className="absolute inset-x-0 bottom-0 p-5 sm:p-7 text-white">
-            <span
-              className="inline-block text-[11px] uppercase tracking-[0.18em] font-medium px-2.5 py-1 rounded-full bg-white/95"
-              style={{ color: '#5B3A08' }}
-            >
-              {formatDate(event.date)}
-            </span>
-            <h1 className="mt-3 font-display font-semibold text-3xl sm:text-4xl lg:text-5xl leading-[1.08] tracking-tight drop-shadow">
-              {event.title}
-            </h1>
-            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-white/90">
-              <span>📍 {event.location}</span>
-              <span>💶 {event.price_per_stall}€ / giornata</span>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="mb-8 rounded-2xl border border-stone-200 bg-cream-50 p-6 sm:p-8 shadow-warm">
-          <div className="flex items-center gap-3 mb-3">
-            <span className="h-px w-8 bg-amber-brand" aria-hidden="true" />
-            <span className="text-[11px] uppercase tracking-[0.18em] font-medium text-amber-dark">
-              {formatDate(event.date)}
-            </span>
-          </div>
-          <h1 className="font-display font-semibold text-3xl sm:text-4xl text-amber-deep leading-[1.08] tracking-tight">
-            {event.title}
-          </h1>
-          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-stone-600">
-            <span>📍 {event.location}</span>
-            <span>💶 {event.price_per_stall}€ / giornata</span>
-          </div>
         </div>
       )}
 
-      {/* Descrizione (se presente) */}
-      {event.description && (
-        <p className="mb-6 text-stone-600 text-base leading-relaxed max-w-2xl">
-          {event.description}
-        </p>
-      )}
+      {/* Info grid 2x2: data, luogo, prezzo, posti — griglia disciplinata Müller-Brockmann */}
+      <dl className="mb-10 grid grid-cols-2 lg:grid-cols-4 gap-px bg-stone-200 border border-stone-200 rounded-2xl overflow-hidden">
+        <InfoCell label="Data" value={formatDate(event.date)} />
+        <InfoCell label="Luogo" value={event.location || '—'} />
+        <InfoCell label="Prezzo" value={`${event.price_per_stall}€ / giorno`} />
+        <InfoCell
+          label="Posti"
+          value={stalls.length > 0
+            ? `${freeCount} liberi · ${stalls.length} totali`
+            : 'In preparazione'}
+        />
+      </dl>
 
-      {/* BUG-037: banner evento passato — niente prenotazione possibile */}
+      {/* BUG-037: banner evento passato */}
       {isPast && (
         <div className="mb-6 max-w-xl rounded-2xl border border-stone-200 bg-stone-50 p-5 text-stone-700">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xl" aria-hidden="true">🔒</span>
-            <h2 className="text-base font-medium text-stone-900">Mercato concluso</h2>
-          </div>
+          <h2 className="text-base font-medium text-stone-900 mb-1">Mercato concluso</h2>
           <p className="text-sm text-stone-600">
-            Questo mercato si è già svolto. Le prenotazioni non sono più possibili. Resta in archivio per riferimento.
+            Questo mercato si è già svolto. Le prenotazioni non sono più possibili.
             <Link href="/" className="ml-1 text-amber-700 underline">Vedi i prossimi mercati</Link>.
           </p>
         </div>
@@ -225,37 +211,48 @@ export default async function EventoPage({ params }) {
         </div>
       )}
 
-      {/* Pill row: riepilogo stato posteggi. Da' al visitatore il senso
-          della disponibilita' prima ancora di guardare la mappa. Ogni
-          stato usa la stessa coppia bg/fg che appare poi sulla griglia. */}
-      {stalls.length > 0 && (
-        <div className="mb-4 flex flex-wrap gap-2 text-xs font-medium" aria-label="Stato posteggi">
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-sage-100 text-sage-700">
-            <span className="w-1.5 h-1.5 rounded-full bg-sage-500" aria-hidden="true" />
-            {freeCount} liberi
-          </span>
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-stone-100 text-stone-600">
-            <span className="w-1.5 h-1.5 rounded-full bg-stone-400" aria-hidden="true" />
-            {bookedCount} prenotati
-          </span>
-          {pendingCount > 0 && (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-light text-amber-dark">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-mid" aria-hidden="true" />
-              {pendingCount} in attesa
+      {/* Occupancy bar + pill stato — riepilogo sintetico prima della mappa */}
+      {stalls.length > 0 && !isPast && (
+        <div className="mb-6">
+          <div className="flex items-baseline justify-between text-xs mb-2">
+            <span className="text-stone-500 uppercase tracking-wider">Disponibilità</span>
+            <span className="text-stone-900 font-medium tabular-nums">
+              {freeCount} su {stalls.length}
             </span>
-          )}
-          {blockedCount > 0 && (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-50 text-red-700">
-              <span className="w-1.5 h-1.5 rounded-full bg-red-400" aria-hidden="true" />
-              {blockedCount} bloccati
+          </div>
+          <div className="h-1.5 bg-stone-100 rounded-full overflow-hidden mb-3">
+            <div
+              className="h-full bg-gradient-to-r from-amber-300 to-amber-500 transition-all duration-500"
+              style={{ width: `${occupancy}%` }}
+              aria-hidden="true"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs font-medium" aria-label="Stato posteggi">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-sage-100 text-sage-700">
+              <span className="w-1.5 h-1.5 rounded-full bg-sage-500" aria-hidden="true" />
+              {freeCount} liberi
             </span>
-          )}
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-stone-100 text-stone-600">
+              <span className="w-1.5 h-1.5 rounded-full bg-stone-400" aria-hidden="true" />
+              {bookedCount} prenotati
+            </span>
+            {pendingCount > 0 && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-light text-amber-dark">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-mid" aria-hidden="true" />
+                {pendingCount} in attesa
+              </span>
+            )}
+            {blockedCount > 0 && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-50 text-red-700">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-400" aria-hidden="true" />
+                {blockedCount} bloccati
+              </span>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Mappa interattiva dei posteggi — tab Griglia + Satellite.
-          Il tab Satellite mostra i posteggi posizionati dall'admin sulla
-          vista aerea Esri World Imagery (senza API key ne' billing). */}
+      {/* Mappa interattiva dei posteggi — l'eroe della pagina */}
       <StallMapTabs
         stalls={stalls}
         event={event}
@@ -263,6 +260,15 @@ export default async function EventoPage({ params }) {
         currentVendor={vendor}
         isPast={isPast}
       />
+    </div>
+  )
+}
+
+function InfoCell({ label, value }) {
+  return (
+    <div className="bg-white p-4 sm:p-5">
+      <dt className="text-[10px] uppercase tracking-wider text-stone-400 font-medium mb-1.5">{label}</dt>
+      <dd className="text-sm sm:text-base text-stone-900 font-medium leading-snug">{value}</dd>
     </div>
   )
 }
