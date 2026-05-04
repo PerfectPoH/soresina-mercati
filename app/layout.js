@@ -1,10 +1,12 @@
 import './globals.css'
 import Header from '@/components/Header'
 import CookieBanner from '@/components/CookieBanner'
+import WaitlistPromotionBanner from '@/components/WaitlistPromotionBanner'
 import { ToastProvider } from '@/components/ToastProvider'
 import Link from 'next/link'
 import { Inter, Fraunces } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/react'
+import { Suspense } from 'react'
 
 // Inter come font di sistema per tutto il body.
 // next/font scarica il font self-hosted in build time (zero richieste a
@@ -140,6 +142,13 @@ export default function RootLayout({ children }) {
           <a href="#main" className="skip-link">
             Salta al contenuto principale
           </a>
+          {/* BUG-046 follow-up: notifica in-site ai promossi da waitlist con
+              countdown 24h e CTA verso /prenotato/[id]. Suspense perche'
+              la query DB richiede sessione e tocca rete; non blocchiamo il
+              first paint del resto della pagina. */}
+          <Suspense fallback={null}>
+            <WaitlistPromotionBanner />
+          </Suspense>
           <Header />
           <main id="main" className="max-w-5xl mx-auto px-4 py-8" tabIndex={-1}>
             {children}
