@@ -81,6 +81,13 @@ ultimo-aggiornamento: 2026-05-04
 - **Fix**: spostato `formatDate` dentro `ProfileBookingCard.jsx` (gia' `'use client'`). Rimossa la prop dal call site (3 occorrenze). `formatDate` resta nel server component per uso interno (`hint={formatDate(...)}`, `<Field value={formatDate(...)}/>`).
 - **Stato**: ✅ RISOLTO. Da pushare staging per verifica preview Vercel.
 
+### Redesign homepage `/` (Sessione 2 di [[Plan-Redesign-Incrementale]])
+- Hero filosofia Kenya Hara: titolo Fraunces 5xl-6xl-7xl con `Soresina` in italic ambra come accent unico, kicker uppercase tracking-wide, padding-top/bottom abbondante (96px+), una sola CTA (no badge "Prenotazioni aperte" + "Sei un venditore?" → spostato in fondo come link discreto).
+- Event card Stamen-style nuova (`HomeEventCard.jsx`): aggiunta progress bar warm gradient amber-300→500 per posti occupati, contatore `freeCount/totalCount` tabular, stagger reveal Framer Motion (delay 0.08s × index).
+- Section "Prossimi mercati" con border-bottom invece di solo h2, contatore eventi uppercase tracking-wider.
+- Empty state ridisegnato: `<p>In attesa.</p>` Fraunces invece di una riga sola.
+- BUG-050 lezione applicata: pre-formattazione `chipDate` e `pill` nel server component, passati al client come stringhe/oggetti.
+
 ### Redesign /profilo (Sessione 1 di [[Plan-Redesign-Incrementale]])
 - Hero "Ciao, [Nome]." in Fraunces 4xl.
 - 4 KPI tile con stagger reveal Framer Motion (`ProfileStatTile.jsx`).

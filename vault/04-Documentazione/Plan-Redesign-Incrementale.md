@@ -25,7 +25,18 @@ Niente big-bang: ogni step è un commit separato, deployabile da solo, rollbacka
 
 ---
 
-## Sessione 2 (PROPOSTA)
+## Sessione 2 (FATTA — 2026-05-04)
+### `/` (homepage) — Kenya Hara hero + Stamen card ✅
+- Hero ridisegnato: kicker uppercase "Pro Loco Soresina · Bancarelle online", H1 Fraunces 5xl-7xl con `Soresina` italic amber, paragrafo XL, una sola CTA `Vedi i prossimi mercati`. Padding 96-112px verticale, niente badge.
+- Event card nuova (`HomeEventCard.jsx`): progress bar warm gradient per posti occupati, contatore `freeCount/totalCount`, stagger reveal Framer Motion.
+- Sezione "Sei un venditore?" spostata in fondo come link discreto (pre era CTA hero).
+- Border-bottom su section header, empty state Fraunces "In attesa."
+
+**File toccati**: `app/page.js` (riscritto), `components/HomeEventCard.jsx` (nuovo).
+
+---
+
+## Sessione 2 originale (proposta superata)
 ### `/` (homepage) — Kenya Hara hero + Stamen card
 **Filosofia di riferimento**: Kenya Hara minimalism per l'hero, Stamen per le event card.
 
