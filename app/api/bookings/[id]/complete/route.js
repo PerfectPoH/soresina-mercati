@@ -17,12 +17,12 @@ const stripe = process.env.STRIPE_SECRET_KEY
 // L'utente proprietario di un booking `pending` (es. promosso da waitlist
 // con 24h di tempo, o un qualsiasi pending senza Stripe session attiva)
 // completa la prenotazione:
-//   - Se l'evento è gratuito (amount = 0) → conferma immediata via admin client.
-//   - Se l'evento ha un prezzo > 0 → genera nuova Stripe checkout session
+//   - Se l'evento e' gratuito (amount = 0) -> conferma immediata via admin client.
+//   - Se l'evento ha un prezzo > 0 -> genera nuova Stripe checkout session
 //     e ritorna l'URL al client per redirect.
 //
 // Server-side check obbligatori:
-//   - booking è del chiamante (o admin)
+//   - booking e' del chiamante (o admin)
 //   - status = 'pending'
 //   - evento esiste, attivo, non passato
 //   - posto/event coerenti
@@ -47,7 +47,7 @@ export async function POST(request, { params }) {
     const { data: b, error: loadErr } = await admin
       .from('bookings')
       .select(`
-        id, user_id, status, stall_id, event_id,
+        id, user_id, status, stall_id, event_id, paid_price,
         events ( id, title, date, price_per_stall, active ),
         stalls ( id, label, price )
       `)
@@ -62,7 +62,7 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: 'not_found', message: 'Prenotazione non trovata.' }, { status: 404 })
     }
 
-    // Ownership check (admin può completare per chiunque, utility di rescue)
+    // Ownership check (admin puo' completare per chiunque, utility di rescue)
     if (b.user_id !== user.id) {
       const { data: vendor } = await supabase
         .from('vendors').select('role').eq('user_id', user.id).maybeSingle()
@@ -73,7 +73,7 @@ export async function POST(request, { params }) {
 
     if (b.status !== 'pending') {
       return NextResponse.json(
-        { error: 'wrong_status', message: `Questa prenotazione è già in stato "${b.status}", non può essere completata.` },
+        { error: 'wrong_status', message: `Questa prenotazione e' gia' in stato "${b.status}", non puo' essere completata.` },
         { status: 400 }
       )
     }
@@ -83,23 +83,39 @@ export async function POST(request, { params }) {
     const todayIso = new Date().toISOString().slice(0, 10)
     if (!ev || !ev.active || !ev.date || ev.date < todayIso) {
       return NextResponse.json(
-        { error: 'event_past_or_archived', message: 'Questo mercato non è più disponibile per la prenotazione.' },
+        { error: 'event_past_or_archived', message: 'Questo mercato non e\' piu\' disponibile per la prenotazione.' },
         { status: 400 }
       )
     }
 
-    const amountToPay = stall?.price ?? ev.price_per_stall ?? 0
+    const livePrice = stall?.price ?? ev.price_per_stall ?? 0
+    const amountToCharge = Number(b.paid_price ?? livePrice ?? 0)
+    if (!Number.isFinite(amountToCharge) || amountToCharge < 0) {
+      return NextResponse.json({ error: 'invalid_price', message: 'Prezzo prenotazione non valido.' }, { status: 500 })
+    }
+
+    // BUG-047: snapshot prezzo. Se paid_price esiste gia' (es. booking da
+    // waitlist promosso dalla funzione DB), non va riscritto: e' il prezzo
+    // promesso all'utente quando il pending e' nato.
 
     // Caso evento gratuito: conferma immediata, niente Stripe.
-    if (Number(amountToPay) === 0) {
-      const { error: confirmErr } = await admin
+    if (amountToCharge === 0) {
+      const updatePayload = { status: 'confirmed' }
+      if (b.paid_price == null) updatePayload.paid_price = 0
+
+      const { data: confirmed, error: confirmErr } = await admin
         .from('bookings')
-        .update({ status: 'confirmed' })
+        .update(updatePayload)
         .eq('id', params.id)
         .eq('status', 'pending')
+        .select('id')
+        .maybeSingle()
       if (confirmErr) {
         safeLogError('[booking/complete] free confirm failed', confirmErr)
         return NextResponse.json({ error: 'confirm_failed', message: confirmErr.message }, { status: 500 })
+      }
+      if (!confirmed) {
+        return NextResponse.json({ error: 'wrong_status', message: 'Questa prenotazione non e piu completabile.' }, { status: 409 })
       }
       try {
         revalidatePath(`/prenotato/${params.id}`)
@@ -107,6 +123,41 @@ export async function POST(request, { params }) {
         if (b.event_id) revalidatePath(`/evento/${b.event_id}`)
       } catch (_) {}
       return NextResponse.json({ ok: true, free: true, checkoutUrl: null })
+    }
+
+    // Per booking vecchi senza snapshot, congeliamo il prezzo una sola volta
+    // prima di creare la sessione Stripe.
+    if (b.paid_price == null) {
+      const { data: snapshotted, error: snapshotErr } = await admin
+        .from('bookings')
+        .update({ paid_price: amountToCharge })
+        .eq('id', params.id)
+        .eq('status', 'pending')
+        .select('id')
+        .maybeSingle()
+
+      if (snapshotErr) {
+        safeLogError('[booking/complete] price snapshot failed', snapshotErr)
+        return NextResponse.json({ error: 'snapshot_failed', message: snapshotErr.message }, { status: 500 })
+      }
+      if (!snapshotted) {
+        return NextResponse.json({ error: 'wrong_status', message: 'Questa prenotazione non e piu completabile.' }, { status: 409 })
+      }
+    } else {
+      const { data: stillPending, error: pendingErr } = await admin
+        .from('bookings')
+        .select('id')
+        .eq('id', params.id)
+        .eq('status', 'pending')
+        .maybeSingle()
+
+      if (pendingErr) {
+        safeLogError('[booking/complete] pending recheck failed', pendingErr)
+        return NextResponse.json({ error: 'recheck_failed', message: pendingErr.message }, { status: 500 })
+      }
+      if (!stillPending) {
+        return NextResponse.json({ error: 'wrong_status', message: 'Questa prenotazione non e piu completabile.' }, { status: 409 })
+      }
     }
 
     // Caso a pagamento: crea nuova Stripe checkout session
@@ -124,7 +175,7 @@ export async function POST(request, { params }) {
           price_data: {
             currency: 'eur',
             product_data: { name: `Prenotazione posteggio ${stall?.label ?? ''} - ${ev.title}` },
-            unit_amount: Math.round(Number(amountToPay) * 100),
+            unit_amount: Math.round(amountToCharge * 100),
           },
           quantity: 1,
         }],

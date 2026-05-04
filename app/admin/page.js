@@ -18,10 +18,11 @@ async function getAdminData() {
       .from('bookings')
       // BUG-029: incasso reale.
       // BUG-038: filtriamo solo prenotazioni di eventi attivi/futuri.
-      // Lo storico delle prenotazioni passate resta nel DB (e nel
-      // profilo utente) ma la dashboard "operativa" mostra solo i
-      // mercati ancora da svolgersi.
-      .select('*, stalls(label, price), events!inner(title, date, price_per_stall)')
+      // BUG-047: includiamo paid_price (snapshot del prezzo al momento
+      // della prenotazione) — la dashboard non deve dipendere dai prezzi
+      // live di stalls/events, altrimenti modifiche del prezzo
+      // ricalcolano l'incasso storico in modo sbagliato.
+      .select('*, paid_price, stalls(label, price), events!inner(title, date, price_per_stall)')
       .eq('status', 'confirmed')
       .gte('events.date', todayIso)
       .order('created_at', { ascending: false })
@@ -44,11 +45,15 @@ async function getAdminData() {
   }
 }
 
-// Somma il prezzo realmente pagato per ogni booking (priorità a stalls.price
-// se settato sul singolo posteggio, altrimenti il default dell'evento).
+// BUG-047: somma il prezzo realmente pagato per ogni booking. Priorita'
+// assoluta a `paid_price` (snapshot immutabile salvato al momento della
+// prenotazione). Per backward-compat con righe pre-migration 23 cadiamo
+// sul calcolo live `stalls.price ?? events.price_per_stall`. Dopo che il
+// backfill della migration 23 e' stato eseguito sul DB, tutti i bookings
+// dovrebbero avere paid_price valorizzato e il fallback non scatta mai.
 function calcolaIncasso(bookings) {
   return bookings.reduce((acc, b) => {
-    const price = b.stalls?.price ?? b.events?.price_per_stall ?? 0
+    const price = b.paid_price ?? b.stalls?.price ?? b.events?.price_per_stall ?? 0
     return acc + Number(price)
   }, 0)
 }

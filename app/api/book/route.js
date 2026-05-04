@@ -143,7 +143,11 @@ export async function POST(request) {
     // a chi ha esplicitamente impostato un mercato gratuito.
     const amountToPay = stallData.price ?? stallData.default_price ?? 35.00
 
-    // 6. Insert in status pending
+    // 6. Insert in status pending.
+    // BUG-047: snapshot del prezzo nel booking. Una volta creato, il prezzo
+    // pagato non cambia anche se l'admin modifica events.price_per_stall o
+    // stalls.price in seguito. Dashboard "incasso stimato" e ogni UI di
+    // lettura usano paid_price come fonte di verita' immutabile.
     const { data, error } = await supabase
       .from('bookings')
       .insert({
@@ -156,6 +160,7 @@ export async function POST(request) {
         goods_type,
         notes:        notes || null,
         status:       'pending',
+        paid_price:   amountToPay,
       })
       .select()
       .single()

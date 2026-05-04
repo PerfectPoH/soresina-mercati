@@ -119,6 +119,12 @@ create table if not exists bookings (
   admin_cancel_reason        text,
   admin_refunded             boolean,
   admin_cancelled_at         timestamptz,
+  -- BUG-047: snapshot del prezzo al momento della prenotazione, immutabile.
+  -- Una volta creato il booking, paid_price NON cambia anche se l'admin
+  -- modifica events.price_per_stall o stalls.price in seguito. Dashboard
+  -- "incasso stimato" e ogni UI di lettura usano questa colonna come
+  -- fonte di verita' invece di ricalcolare live.
+  paid_price                 numeric(10,2),
   created_at                 timestamptz default now()
 );
 
@@ -438,10 +444,11 @@ begin
 end;
 $$;
 
--- 2.10 promote_next_waitlist — promozione flow (BUG-041, vedi 19_)
+-- 2.10 promote_next_waitlist — promozione flow (BUG-041, BUG-047 follow-up)
 -- Quando un posto si libera, promuove il primo della lista d'attesa
 -- (priorita' a chi e' iscritto a quel posto specifico, poi lista generale,
--- FIFO per created_at). Crea booking pending con waitlist_promoted_at=now().
+-- FIFO per created_at). Crea booking pending con waitlist_promoted_at=now()
+-- e paid_price snapshottato al momento della promozione.
 -- Se l'utente e' al limite (P0001), salta e prova il successivo (ricorsione).
 create or replace function public.promote_next_waitlist(p_event_id uuid, p_stall_id uuid)
 returns uuid
@@ -452,7 +459,22 @@ as $$
 declare
   v_entry record;
   v_booking_id uuid;
+  v_event_ok boolean;
+  v_price numeric(10,2);
 begin
+  select (active = true and date >= current_date)
+    into v_event_ok
+    from events
+   where id = p_event_id;
+
+  if not coalesce(v_event_ok, false) then return null; end if;
+
+  select coalesce(s.price, e.price_per_stall, 0)
+    into v_price
+    from stalls s, events e
+   where s.id = p_stall_id
+     and e.id = p_event_id;
+
   select * into v_entry from waitlist
     where event_id = p_event_id and (stall_id = p_stall_id or stall_id is null)
     order by (case when stall_id = p_stall_id then 0 else 1 end), created_at
@@ -461,10 +483,10 @@ begin
   begin
     insert into bookings (
       stall_id, event_id, user_id, vendor_name, vendor_phone, vendor_email,
-      goods_type, status, notes, from_waitlist, waitlist_promoted_at
+      goods_type, status, notes, from_waitlist, waitlist_promoted_at, paid_price
     ) values (
       p_stall_id, p_event_id, v_entry.user_id, v_entry.vendor_name, v_entry.vendor_phone, v_entry.vendor_email,
-      v_entry.goods_type, 'pending', v_entry.notes, true, now()
+      v_entry.goods_type, 'pending', v_entry.notes, true, now(), v_price
     )
     returning id into v_booking_id;
   exception

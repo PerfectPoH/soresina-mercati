@@ -37,7 +37,7 @@ async function getBookingWithContext(bookingId) {
       id, stall_id, event_id, user_id, status,
       vendor_name, vendor_phone, vendor_email, goods_type, notes, created_at,
       from_waitlist, waitlist_promoted_at,
-      admin_cancel_reason, admin_refunded, admin_cancelled_at,
+      admin_cancel_reason, admin_refunded, admin_cancelled_at, paid_price,
       events ( id, title, date, location, description, price_per_stall, active ),
       stalls ( id, label, price, row_idx, col_idx )
     `)
@@ -96,7 +96,9 @@ export default async function PrenotatoPage({ params }) {
   const { booking } = res
   const ev    = booking.events
   const stall = booking.stalls
-  const price = stall?.price ?? ev?.price_per_stall
+  // BUG-047: paid_price ha priorita' (snapshot immutabile). Fallback al
+  // calcolo live per backward-compat con righe pre-migration 23.
+  const price = booking.paid_price ?? stall?.price ?? ev?.price_per_stall
   const isCancelled = booking.status === 'cancelled'
   // Pending Stripe (15 min) o pending da waitlist (24h): UX distinta
   // dalla "Prenotazione confermata!" per evitare false promesse all'utente.
