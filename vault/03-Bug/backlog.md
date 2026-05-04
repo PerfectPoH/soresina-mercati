@@ -75,6 +75,12 @@ ultimo-aggiornamento: 2026-05-04
 - **Email**: ⏳ ancora parcheggiato (BUG-040 Resend). La notifica in-site copre il caso utente loggato.
 - **Stato**: ✅ RISOLTO (in-site). Email follow-up con Resend.
 
+### BUG-050 — Crash /profilo: function passata come prop server→client
+- **Sintomo**: post-prenotazione redirect a /profilo da "Pagina Errore" `Qualcosa e' andato storto`. Sentry SORESINA-MERCATI-2: `Error: An error occurred in the Server Components render` (3 occorrenze in 1 minuto, environment=preview).
+- **Causa**: `app/profilo/page.js` (server component) passava `formatDate={formatDate}` a `ProfileBookingCard` (client component). Next.js 14 non permette function come prop attraverso il boundary RSC: i prop devono essere JSON-serializzabili.
+- **Fix**: spostato `formatDate` dentro `ProfileBookingCard.jsx` (gia' `'use client'`). Rimossa la prop dal call site (3 occorrenze). `formatDate` resta nel server component per uso interno (`hint={formatDate(...)}`, `<Field value={formatDate(...)}/>`).
+- **Stato**: ✅ RISOLTO. Da pushare staging per verifica preview Vercel.
+
 ### Redesign /profilo (Sessione 1 di [[Plan-Redesign-Incrementale]])
 - Hero "Ciao, [Nome]." in Fraunces 4xl.
 - 4 KPI tile con stagger reveal Framer Motion (`ProfileStatTile.jsx`).

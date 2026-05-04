@@ -118,7 +118,7 @@ export default async function ProfiloPage() {
         >
           <div className="grid gap-3">
             {bucketPending.map(({ b, cls }) => (
-              <ProfileBookingCard key={b.id} booking={b} classification={cls} formatDate={formatDate} />
+              <ProfileBookingCard key={b.id} booking={b} classification={cls} />
             ))}
           </div>
         </Section>
@@ -136,7 +136,7 @@ export default async function ProfiloPage() {
         {bucketActive.length > 0 && (
           <div className="grid gap-3">
             {bucketActive.map(({ b, cls }) => (
-              <ProfileBookingCard key={b.id} booking={b} classification={cls} formatDate={formatDate} />
+              <ProfileBookingCard key={b.id} booking={b} classification={cls} />
             ))}
           </div>
         )}
@@ -160,7 +160,7 @@ export default async function ProfiloPage() {
           </summary>
           <div className="grid gap-3">
             {bucketHistory.map(({ b, cls }) => (
-              <ProfileBookingCard key={b.id} booking={b} classification={cls} formatDate={formatDate} />
+              <ProfileBookingCard key={b.id} booking={b} classification={cls} />
             ))}
           </div>
         </details>

@@ -5,6 +5,19 @@ import Link from 'next/link'
 import RequestBookingCancellation from './RequestBookingCancellation'
 import CompleteBookingButton from './CompleteBookingButton'
 
+// BUG-050: formatDate vive INSIDE the client component perche' Next.js 14
+// non permette di passare function come prop da server component a client
+// component (ServerComponentsRender error). Era prima passato come prop
+// dal server `app/profilo/page.js`, causando crash di /profilo in preview.
+function formatDate(s) {
+  if (!s) return '—'
+  try {
+    return new Date(s).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })
+  } catch {
+    return '—'
+  }
+}
+
 /**
  * Card singola di una prenotazione nel profilo utente.
  * Designed for: gerarchia chiara (Pentagram), warm palette (Stamen),
@@ -14,11 +27,10 @@ import CompleteBookingButton from './CompleteBookingButton'
  *
  * @param {{
  *   booking: any,
- *   classification: { key: string, label: string, color: string, accent: string },
- *   formatDate: (s: string) => string,
+ *   classification: { key: string, label: string, color: string },
  * }} props
  */
-export default function ProfileBookingCard({ booking, classification, formatDate }) {
+export default function ProfileBookingCard({ booking, classification }) {
   const b = booking
   const cls = classification
   const price = b.paid_price ?? b.stalls?.price ?? b.events?.price_per_stall ?? 0
