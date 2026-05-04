@@ -19,8 +19,8 @@
 | File | Contenuto |
 |------|-----------|
 | [[Roadmap-Master]] | Checklist completa + Prossimi Obiettivi (allineata) |
-| [[Code-Review-Codex-vs-Opus]] | Audit Codex aggiornato al 28 aprile: stato repo, docs, schema e debt residui |
-| [[Stato-Progetto-2026-04-26]] | Snapshot stato attuale (~70% completato) |
+| [[Code-Review-Codex-vs-Opus]] | Audit Codex aggiornato: repo, docs, sicurezza, vault e Graphify |
+| [[Stato-Progetto-2026-04-26]] | Snapshot archiviato in `04-Documentazione/_archive/` |
 
 ## 🐛 Bug & Backlog
 

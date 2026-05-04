@@ -1,308 +1,155 @@
 ---
 tipo: bug-tracker
-ultimo-aggiornamento: 2026-04-26
+ultimo-aggiornamento: 2026-05-04
 ---
 
 # Backlog dei Bug
 
-> 🟢 **0 bug critici aperti.** BUG-045 (motivo cancellazione admin → utente) + BUG-046 (utente promosso da waitlist può completare pagamento) chiusi nella sessione 2026-04-28 sera (Opus). Codex 28 apr P1/P2 chiusi (README migrations 13→21, SECURITY.md service_role allineato, UX prenotato/[id] distinta variant pending). Restano solo 4 tech-debt non bloccanti.
+> 🔴 **3 bug aperti da review Codex 2026-05-04.** Tutti riguardano coerenza del flusso booking/pending/Stripe: BUG-050, BUG-051, BUG-052.
 >
-> 📚 Storia completa di BUG-001 → BUG-025 (con cause, fix, motivazioni di chiusura) è in [[Bug-Risolti-Storico]] (in `_archive`).
+> 📚 **Storia completa** (BUG-001 → BUG-046, con cause, fix, motivazioni di chiusura) → [[Bug-Risolti-Storico]] in `_archive/`.
 
 ---
 
 ## 🔴 Bug aperti
 
-*(nessuno)*
+### BUG-050 — `/api/book` non verifica server-side che il posteggio sia libero
+- **Priorita**: P1.
+- **Sintomo**: una richiesta stale o costruita a mano puo' inviare `stall_id` di un posteggio `blocked`, `booked` o gia' `pending`.
+- **Causa root**: `app/api/book/route.js` legge da `stalls_with_status`, ma seleziona solo prezzo/evento/label e non seleziona ne' controlla `stall_status` prima dell'insert.
+- **Impatto**: l'utente puo' creare un booking pending su un posteggio non prenotabile. Se il posto e' gia' confirmed, puo' arrivare fino a Stripe e poi il webhook rischia di fallire/no-op; se e' blocked, puo' confermare un posto bloccato dall'admin.
+- **Fix consigliato**: selezionare `stall_status` e rifiutare ogni valore diverso da `free`. Per robustezza vera, spostare la prenotazione in una RPC/constraint DB-side atomica che controlli stato + insert nella stessa transazione.
+- **File**: `app/api/book/route.js` righe 110-164.
+- **Stato**: 🔴 aperto.
+
+### BUG-051 — GC Stripe 15 minuti cancella pending da waitlist che dovrebbero durare 24h
+- **Priorita**: P1.
+- **Sintomo**: il banner e il flusso waitlist promettono 24h per completare il pagamento, ma il cron `release_expired_pending_bookings` cancella i booking pending dopo 15 minuti.
+- **Causa root**: in `supabase/schema.sql`, `release_expired_pending_bookings()` filtra solo `status = 'pending'` e `created_at < now() - interval '15 minutes'`, senza escludere `from_waitlist = true`.
+- **Impatto**: una promozione waitlist puo' sparire dopo 15 minuti invece che dopo 24h. Il banner puo' mostrare una deadline falsa o l'utente puo' perdere il posto prima del tempo dichiarato.
+- **Fix consigliato**: distinguere esplicitamente pending Stripe e pending waitlist. Minimo: aggiungere `and coalesce(from_waitlist, false) = false` al GC 15 minuti e lasciare i waitlist pending al cron `release_expired_waitlist_promotions()`.
+- **File**: `supabase/schema.sql` righe 422-425 e migration corrispondente da aggiungere.
+- **Stato**: 🔴 aperto.
+
+### BUG-052 — `/api/bookings/[id]/complete` puo' creare checkout Stripe multiple per lo stesso booking
+- **Priorita**: P2.
+- **Sintomo**: doppio click, due tab o retry possono chiamare piu' volte l'endpoint di completamento su uno stesso booking pending.
+- **Causa root**: dopo il recheck `status = pending`, la route crea una nuova Stripe Checkout session senza marcare il booking come gia' associato a una sessione attiva e senza riusare una sessione esistente.
+- **Impatto**: possono esistere piu' sessioni pagabili per lo stesso booking. Il primo pagamento conferma, un pagamento successivo puo' essere accettato da Stripe ma ignorato dall'app perche' il webhook aggiorna solo `status = pending`.
+- **Fix consigliato**: introdurre un claim/idempotency per booking prima di creare Checkout. Opzioni: salvare `stripe_session_id` appena creata e riusarla se ancora valida; oppure usare una RPC/colonna `checkout_locked_at`/`checkout_session_id` con update atomico su `status = pending`.
+- **File**: `app/api/bookings/[id]/complete/route.js` righe 146-185.
+- **Stato**: 🔴 aperto.
 
 ---
 
-## 🆕 Bug risolti in questa sessione (28 Apr sera, Opus)
+## 🆕 Bug risolti in questa sessione (2026-05-04, Codex audit)
 
-### BUG-045 — Motivo cancellazione admin non comunicato all'utente
-- **Sintomo**: l'admin annulla una prenotazione (con o senza rimborso) e l'utente non riceve nessuna spiegazione.
-- **Fix DB** (migration 22): aggiunte colonne `bookings.admin_cancel_reason text`, `admin_refunded boolean`, `admin_cancelled_at timestamptz`.
-- **Fix UI admin** `components/AdminCancellationActions.jsx`: prompt obbligatorio del motivo prima di confermare l'azione (non si procede se vuoto). Il motivo viene mostrato nella conferma per evitare clic accidentali.
-- **Fix API** `POST /api/admin/bookings/[id]/cancel`: accetta `body.reason` (max 500 char), salva con `admin_cancel_reason`, `admin_refunded`, `admin_cancelled_at`.
-- **Fix UI utente**: profilo (`app/profilo/page.js`) mostra il box "Annullata dall'organizzazione" con motivo + indicazione rimborso emesso/no, e idem nella pagina conferma `/prenotato/[id]`.
-- **Email**: integrazione Resend in coda (BUG-040). I dati sono già pronti per il template.
-- **Stato**: ✅ RISOLTO
+### BUG-048 — `supabase/schema.sql` non includeva la nuova logica `promote_next_waitlist`
+- **Sintomo**: la migration 23 crea `bookings.paid_price` e aggiorna `promote_next_waitlist` per snapshottare il prezzo, ma il dump consolidato `supabase/schema.sql` contiene ancora la funzione vecchia.
+- **Causa root**: schema aggiornato solo per la colonna `paid_price`; la sezione funzione e' rimasta alla versione BUG-041.
+- **Impatto**: chi ricostruisce il DB da `schema.sql` perde `paid_price` sulle promozioni da waitlist e anche il guard su evento attivo/futuro.
+- **Fix**: `supabase/schema.sql` riallineato alla funzione definita in `supabase/migrations/23_bookings_paid_price.sql`: `v_event_ok`, `v_price`, insert con `paid_price`.
+- **Stato**: ✅ risolto da Codex audit.
 
-### BUG-046 — Utente promosso da waitlist non poteva completare la prenotazione
-- **Sintomo**: l'admin promuove un utente dalla waitlist → il booking viene creato come `pending` (giallo) → l'utente lo vede nel profilo ma non ha modo di pagarlo o confermarlo (per gli eventi gratuiti). Restava in pending fino allo scadere delle 24h.
-- **Fix API**: nuovo endpoint `POST /api/bookings/[id]/complete`:
-  - Verifica ownership + stato `pending` + evento attivo/futuro
-  - Se prezzo = 0 → conferma immediata via admin client (bypass RLS)
-  - Se prezzo > 0 → crea nuova Stripe Checkout session con `metadata.booking_id` puntando al booking esistente, success/cancel URL su `/prenotato/[id]`
-- **Fix UI**: nuovo componente client `CompleteBookingButton.jsx` con label dinamica ("Conferma prenotazione" se gratuito, "Completa il pagamento" se a pagamento). Mostrato:
-  - In `app/prenotato/[id]/page.js` quando il variant è `pending` (sotto l'hero)
-  - In `app/profilo/page.js` accanto a ogni booking pending (sostituisce il bottone "Richiedi cancellazione" finché è pending)
-- **Stato**: ✅ RISOLTO
-
-### BUG-042 — Promote waitlist su evento passato
-- **Sintomo**: l'admin promuoveva un utente della lista d'attesa su un evento passato/archiviato → booking creato come `pending` impossibile da confermare (bloccato dai check `event_past` su `/api/book` e nel webhook) → restava "in attesa" all'infinito.
-- **Causa**: `promote_next_waitlist(uuid, uuid)` non verificava lo stato dell'evento.
-- **Fix DB** (migration 20): pre-check `events.active = true AND events.date >= current_date` all'inizio della funzione. Cleanup idempotente che cancella i bookings pending residui creati da promote su eventi non più validi.
-- **Fix API** `app/api/admin/waitlist/[id]/promote/route.js`: defense-in-depth, errore esplicito 400 `event_past_or_archived` se l'admin prova a promuovere su un evento non valido.
-- **Stato**: ✅ RISOLTO
-
-### BUG-043 — Profilo: bottone "Richiedi cancellazione" attivo su eventi passati
-- **Sintomo**: utente vedeva il bottone "Richiedi cancellazione" su prenotazioni di mercati già conclusi.
-- **Fix UI** `app/profilo/page.js`: la `classify` ora valuta lo stato dell'evento PRIMA del booking status. Eventi passati → badge "Passata" (no bottone). Eventi rimossi/RLS-nascosti → badge "Evento rimosso" (no bottone).
-- **Fix DB** (migration 21): `request_booking_cancellation` rifiuta lato server se l'evento è passato (defense in depth contro chiamate dirette all'RPC).
-- **Stato**: ✅ RISOLTO
-
-### BUG-044 — Profilo: "Evento" senza nome/data per prenotazioni promosse su eventi archiviati
-- **Sintomo**: dopo BUG-042, un booking pending residuo aveva `events` null nel join (RLS nasconde events inactive ai non-admin) → UI mostrava placeholder "Evento" 0€ senza data.
-- **Causa root**: BUG-042 (promote su evento passato).
-- **Fix UI**: gestione gracefully — `classify` ritorna `'unknown'` con label "Evento rimosso", titolo fallback "Evento rimosso", data "—". Niente bottone cancellazione su prenotazioni con evento mancante.
-- **Cleanup runtime**: migration 20 ha già messo i bookings pending orfani in `cancelled`.
-- **Stato**: ✅ RISOLTO (sintomo eliminato dal fix BUG-042)
+### BUG-049 — `/api/bookings/[id]/complete` poteva riscrivere lo snapshot `paid_price`
+- **Sintomo**: una prenotazione pending promossa da waitlist puo' avere gia' `paid_price`, ma l'endpoint di completamento ricalcola il prezzo live da `stalls/events` e lo sovrascrive prima di Stripe.
+- **Causa root**: la query non seleziona `paid_price`; `amountToPay` usa solo prezzo live e l'`update({ paid_price })` non controlla errori.
+- **Impatto**: se l'admin cambia prezzo tra promozione e pagamento, l'utente puo' pagare il nuovo prezzo invece dello snapshot creato dalla promozione. Questo contraddice l'immutabilita' documentata da BUG-047.
+- **Fix**: `app/api/bookings/[id]/complete/route.js` seleziona `paid_price`, calcola `amountToCharge = b.paid_price ?? livePrice`, valorizza `paid_price` solo se null, usa `amountToCharge` per Stripe/free flow e gestisce l'errore di snapshot.
+- **Stato**: ✅ risolto da Codex audit.
 
 ---
 
-## 🩺 Audit Codex 28 Apr — chiusura P1
+## 🆕 Bug risolti in questa sessione (2026-05-04, Opus)
 
-### `supabase/schema.sql` allineato alle migrations 13-21
-- Aggiunti `bookings.from_waitlist` + `bookings.waitlist_promoted_at` + `waitlist.stall_id` + funzioni `archive_past_events`, `promote_next_waitlist`, `release_expired_waitlist_promotions` nel dump consolidato.
-- Bootstrap su nuovo Supabase project ora coerente: schema.sql + le 7 migration in `supabase/migrations/` (13 → 21).
+### BUG-047 — Modifica prezzo evento ricalcola incasso retroattivo
+- **Sintomo**: l'admin modifica `events.price_per_stall` (es. 5€ → 10€). L'"incasso stimato" in dashboard cambia anche per le prenotazioni gia' confermate, mostrando un valore diverso da quello realmente pagato dall'utente.
+- **Causa**: `calcolaIncasso(bookings)` leggeva live `b.stalls?.price ?? b.events?.price_per_stall ?? 0`. Senza una colonna snapshot, ogni lettura ricalcolava il prezzo corrente.
+- **Fix DB** (migration 23): nuova colonna `bookings.paid_price numeric(10,2)`. Backfill SQL one-shot per le righe esistenti con il prezzo corrente. `promote_next_waitlist` aggiornata per snapshottare gia' alla creazione del pending da waitlist.
+- **Fix codice**: `app/api/book/route.js` setta `paid_price` all'INSERT. `app/api/bookings/[id]/complete/route.js` setta `paid_price` prima di Stripe. `app/admin/page.js`, `app/profilo/page.js`, `app/prenotato/[id]/page.js` leggono `b.paid_price ?? <fallback live>`.
+- **Stato**: ✅ codice + migration scritti. **DA APPLICARE** la migration 23 su prod e staging via mcp.
 
-### `README.md` riallineato
-- Sezione "Funzionalità implementate" con checklist `[x]` reale: auth, Stripe, cancellazioni, waitlist, mappa satellitare, GDPR, Sentry, staging.
-- Sezione "Roadmap aperta" ridotta a 3 voci reali (Resend, dominio, notifica admin).
-- Aggiunta sezione "Bootstrap database" con sequenza schema.sql + migrations + Supabase Auth config.
+### Banner waitlist promotion (follow-up BUG-046)
+- **Sintomo**: l'utente promosso da waitlist non aveva nessuna evidenza in-site, doveva ricordarsi di andare manualmente nel profilo per pagare.
+- **Fix**: `components/WaitlistPromotionBanner.jsx` (server) + `WaitlistPromotionBannerClient.jsx` (client) integrati in `app/layout.js`. Banner persistente in cima con countdown 24h live (urgent < 4h diventa rosso), CTA "Vai al profilo →", dismiss persistente in localStorage.
+- **Email**: ⏳ ancora parcheggiato (BUG-040 Resend). La notifica in-site copre il caso utente loggato.
+- **Stato**: ✅ RISOLTO (in-site). Email follow-up con Resend.
+
+### Redesign /profilo (Sessione 1 di [[Plan-Redesign-Incrementale]])
+- Hero "Ciao, [Nome]." in Fraunces 4xl.
+- 4 KPI tile con stagger reveal Framer Motion (`ProfileStatTile.jsx`).
+- 3 sezioni semantiche: "Da fare ora" / "Prossime" / "Storico" collassabile.
+- Card prenotazione ridisegnate (`ProfileBookingCard.jsx`): gradient sottile per stato, hover lift -2px, prezzo grande Fraunces.
+- Filosofie applicate da [[Skill-Huashu-Design]]: Pentagram (gerarchia tipografica) + Stamen (warm gradient) + Kenya Hara (whitespace).
 
 ---
 
-## 🆕 Bug risolti in sessione (27 Apr, Opus)
-
-### BUG-038 — Admin mostrava prenotazioni di mercati passati con bottone "Annulla"
-- **Sintomo**: dashboard admin elencava bookings di eventi conclusi e permetteva di annullarle (distorcendo storico/statistiche).
-- **Fix**:
-  - `app/admin/page.js`: query bookings filtrata `events.date >= today` (inner join). Le prenotazioni passate restano nel DB (e nel profilo utente con badge "Passata") ma non appaiono nella dashboard "operativa".
-  - `components/AdminBookingRow.jsx`: per le prenotazioni di eventi passati (caso edge: se il filtro non basta) il bottone "Annulla" è sostituito da label "Storico".
-- **Stato**: ✅ RISOLTO
-
-### BUG-039 — Mercati passati restavano "Attivi" nell'admin
-- **Sintomo**: gli eventi conclusi continuavano a essere `active=true`, mescolati ai mercati futuri nella dashboard.
-- **Fix**:
-  - **DB**: migration `19_auto_archive_past_events_and_waitlist_promote` aggiunge funzione `archive_past_events()` SECURITY DEFINER + cron `pg_cron` ogni notte alle 03:15 → setta `active=false` per eventi con `date < current_date`. Eseguito subito un primo run: 2 eventi passati archiviati su staging.
-  - **UI**: dashboard admin separa **Eventi attivi** (sezione principale) e **Archivio** (sezione collassabile `<details>` con tutti gli eventi passati o disattivati). Lo storico è sempre accessibile in 1 click.
-- **Stato**: ✅ RISOLTO
+## ⏳ In attesa di dipendenze esterne
 
 ### BUG-040 — Email post-cancellazione/rimborso non inviate
-- **Sintomo**: quando admin annulla o approva richiesta cancellazione, l'utente non riceve nessuna notifica email.
-- **Stato**: ⏳ PARCHEGGIATO (dipende da Resend onboarding). Quando si implementa la pipeline email transazionali, va aggiunto in:
+- **Sintomo**: quando admin annulla/approva richiesta cancellazione, l'utente non riceve email.
+- **Blocco**: dipende da Resend onboarding / dominio verificato.
+- **Hook da aggiungere quando si sblocca**:
   - Webhook Stripe (conferma prenotazione)
-  - Cancellation API (notifica all'utente quando l'admin approva con/senza rimborso)
-  - Promote waitlist API (notifica all'utente promosso che ha 24h per pagare)
-
-### BUG-041 — Lista d'attesa solo passiva (admin poteva solo rimuovere)
-- **Sintomo**: nessun flusso di assegnazione automatica/manuale quando un posto si libera.
-- **Idea Salandra**: lista d'attesa **generale** (qualsiasi posto) o **specifica** per posto. Quando si libera, primo in lista riceve un booking pending con scadenza 24h.
-- **Fix**:
-  - **DB** (migration `19`): `waitlist.stall_id uuid` (nullable, NULL=lista generale, valorizzato=lista posto specifico) + `bookings.from_waitlist boolean` + `bookings.waitlist_promoted_at timestamptz`
-  - **Funzione DB** `promote_next_waitlist(p_event_id, p_stall_id)`: priorità a chi ha targetato lo specifico posto, poi lista generale. Crea booking `pending` con `from_waitlist=true` + `waitlist_promoted_at=now()`. Se utente è al limite booking (P0001), salta e prova il successivo. Rimuove la entry dalla waitlist.
-  - **Funzione DB** `release_expired_waitlist_promotions()`: cron orario, cancella i pending da waitlist scaduti (> 24h) e auto-promuove il successivo.
-  - **API admin** `POST /api/admin/bookings/[id]/cancel`: dopo refund Stripe, chiama `promote_next_waitlist(event_id, stall_id)` per assegnare automaticamente il posto liberato.
-  - **API admin** `POST /api/admin/waitlist/[id]/promote`: promozione manuale di un'iscrizione (per lista generale, sceglie il primo posto libero).
-  - **UI admin** `components/AdminWaitlistRow.jsx`: bottone "Promuovi" oltre a "Rimuovi". Crea booking pending 24h.
-- **Email/notifica al promosso**: parking BUG-040 (Resend).
-- **Stato**: ✅ RISOLTO (logic + DB + UI). Email da implementare con Resend.
-
----
-
-## 🩺 Audit Codex 2026-04-27 — punti chiusi
-
-### [P1] BUG-027 reale fix — `npm run build` ora verde
-- **Diagnosi Codex**: `dynamic = 'force-dynamic'` su `app/opengraph-image.js` (metadata file convention) NON salta il prerender al build → `@vercel/og` su Windows continuava a fallire con `TypeError: Invalid URL`.
-- **Fix definitivo**: rimosso `app/opengraph-image.js`, creata route API `app/api/og/route.js` (che NON viene prerender al build). `app/layout.js` referenzia `metadata.openGraph.images = ['/api/og']` esplicitamente. Aggiunti header `Cache-Control` per evitare rigenerazione su ogni preview.
-- **Stato**: ✅ RISOLTO definitivo.
-
-### [P2] GOODS_TYPES residuo in WaitlistWidget — chiusura BUG-023
-- **Fix**: rimossa l'ultima copia hardcoded di `GOODS_TYPES` in `components/WaitlistWidget.jsx`. Ora importa da `lib/validate`.
-- **Stato**: ✅ RISOLTO definitivo.
-
-### [P3] Accessibility: `aria-pressed` su `role="gridcell"`
-- **Fix**: `components/StallMap.jsx` riga 390 cambiato da `aria-pressed` a `aria-selected` (compatibile con role gridcell).
-- **Stato**: ✅ RISOLTO
-
-### [P3] react-hooks/exhaustive-deps in StallMapSatellite
-- **Fix**: `MapController` ora usa `centerKey` (stringa) come dep stabile invece di indici `center[0], center[1]`.
-- **Stato**: ✅ RISOLTO
-
-### Punti audit ancora aperti (non bloccanti)
-- **Date helper UTC vs locale**: `toISOString().slice(0, 10)` usato in 9+ file. Per il volume Pro Loco (1 timezone, eventi giornalieri) rischio teorico (drift di 1-2h al confine notturno). Tech-debt da affrontare se diventiamo multi-region.
-- **README.md / docs/SECURITY.md fuori sync**: aggiornati in questa sessione (vedi devlog).
-- **EventForm.jsx commenti ambigui rows/cols**: aggiornati.
-- **GDPR `consent_at` non valorizzato in bootstrap profilo**: tech-debt — quando un utente fa signup il consent va salvato esplicitamente. Da affrontare nella fase email Resend.
-
----
-
-## 🆕 Bug risolti in sessione (26 Apr notte tarda, Opus)
-
-### BUG-034 — Eventi creabili con date passate
-- **Sintomo**: l'admin poteva creare un evento con `date < today`.
-- **Fix**: validazione `date >= todayIso` su `POST /api/events` e `PATCH /api/events/[id]`. Permette `today` per eventi serali creati nel pomeriggio. Errore 400 esplicito.
-
-### BUG-035 — Prenotazione gratuita resta "in attesa di conferma"
-- **Sintomo**: utente prenota posteggio gratuito → vede pagina conferma → torna in mappa → posteggio giallo "in attesa".
-- **Causa**: il flusso 0 EUR usava `createSupabaseServerClient` (cookie utente) per fare `UPDATE bookings SET status='confirmed'`. La policy RLS `bookings_admin_update` richiede `is_admin()` → l'update veniva scartato silenziosamente → booking restava `pending`.
-- **Fix**: il flusso 0 EUR ora usa `createSupabaseAdminClient` (service role bypass RLS), come già fa il webhook Stripe. Coerente con la stessa logica `pending → confirmed` server-to-server.
-
-### BUG-036 — Iscrizione a lista d'attesa con max prenotazioni già raggiunto
-- **Sintomo**: utente con 2 confirmed/pending poteva comunque iscriversi alla waitlist.
-- **Fix**: in `POST /api/waitlist`, dopo il check vendor profilo, count delle prenotazioni `confirmed+pending` per quell'evento. Se ≥ 2 → 400 "Hai già il numero massimo di prenotazioni per questo evento. La lista d'attesa serve a chi non ha ancora prenotato."
-
-### BUG-037 — Eventi passati restano visibili e prenotabili
-- **Sintomo**: gli eventi con `date < today` apparivano in homepage, e gli utenti potevano cliccarli e prenotare.
-- **Fix in più livelli**:
-  - **Home `/`**: query filtra `date >= today` (gli eventi passati spariscono dalla lista pubblica)
-  - **Pagina evento `/evento/[id]`**: se `isPast`, banner "Mercato concluso" + `BookingForm` non mostrato (passato `isPast` a `StallMapTabs` → `StallMap`, che disabilita le celle e blocca `handleSelect`)
-  - **API `/api/book`**: server-side check `event_date < today` → 400 `event_past` (difesa contro bypass via curl)
-  - **API `/api/waitlist`**: stesso check → 400 `event_past`
-  - **Profilo utente**: gli eventi passati restano visibili nelle prenotazioni dell'utente con badge "Passata" (UX corretta: lo storico personale è importante)
-- **Stato**: ✅ RISOLTO
-
----
-
-## 🆕 Bug risolti in questa sessione (26 Apr notte, Opus)
-
-### BUG-029 — Incasso stimato hardcoded a 35€/booking
-- **Sintomo**: dashboard admin mostrava "70€" per 2 prenotazioni da 3€ ciascuna.
-- **Causa**: `app/admin/page.js` riga 79: `bookings.length * 35` (hardcoded, prezzo fisso).
-- **Fix**: nuova funzione `calcolaIncasso(bookings)` che somma `stalls.price ?? events.price_per_stall` per ogni booking. Query estesa con `stalls(label, price), events(title, date, price_per_stall)`.
-- **Stato**: ✅ RISOLTO
-
-### BUG-030 — Limite 2 prenotazioni bypassabile via Stripe
-- **Sintomo**: utente con 2 prenotazioni confirmed iniziava un terzo checkout, **pagava** su Stripe, ma il booking restava `pending` per sempre (webhook silenziosamente bloccato).
-- **Causa**: trigger `enforce_booking_limit` contava solo `confirmed`. Insert di nuovo booking come `pending` passava → Stripe addebitava → webhook UPDATE pending→confirmed bloccato dal trigger (count=3) → silent failure → utente paga senza ricevere prenotazione.
-- **Fix**: migration `16_booking_limit_includes_pending`. Il trigger ora conta `confirmed + pending` escludendo l'id corrente. L'INSERT del 3° booking viene bloccato PRIMA del checkout Stripe → utente vede errore "Hai raggiunto il limite di 2 posteggi" senza nessun addebito.
-- **Stato**: ✅ RISOLTO su prod e staging.
-
-### BUG-031 — Numero slot evento non modificabile dopo creazione
-- **Sintomo**: campi righe/colonne disabilitati in modifica.
-- **Fix**: 
-  - `EventForm.jsx`: rimosso `disabled={isEdit}`, rows/cols editabili
-  - `app/api/events/[id]/route.js` PATCH: accetta `rows`/`cols`, valida solo aumento (diminuzione → 400 esplicito), chiama `generate_stalls()` per creare i nuovi posteggi (ON CONFLICT DO NOTHING preserva i vecchi)
-  - Dopo generate: chiama `copy_stall_positions_from_template()` per ereditare le coordinate dei nuovi posteggi dall'ultimo evento alla stessa location
-  - Pagina modifica: aggiornata nota di guidance
-- **Stato**: ✅ RISOLTO
-
-### BUG-032 — Profilo utente mostra solo conteggio prenotazioni
-- **Sintomo**: la pagina `/profilo` mostrava solo "Totali: N, Confermate: N" senza dettagli.
-- **Fix**: query estesa con `events(title, date, price_per_stall), stalls(label, price)`. UI nuova: lista ordinata per data, per ogni booking mostra evento + data + posteggio + prezzo + badge stato (Attiva / In attesa / Passata / Annullata). Click sulla prenotazione → pagina conferma `/prenotato/[id]`. Bottone "Richiedi cancellazione" per le attive/pending.
-- **Stato**: ✅ RISOLTO
-
-### BUG-033 — Cancellazione utente con flusso admin + rimborso Stripe
-- **Sintomo**: l'utente non aveva modo di richiedere annullamento; l'admin poteva cancellare ma senza rimborso.
-- **Fix**: flusso completo
-  - **DB**: migration `18_booking_cancellation_request` aggiunge colonne `cancellation_requested_at`, `cancellation_reason`, `stripe_session_id`, `stripe_payment_intent_id` su `bookings`. Funzione `request_booking_cancellation(uuid, text)` SECURITY DEFINER per check ownership + stato.
-  - **Webhook Stripe**: in `handleCheckoutCompleted` salva `stripe_session_id` e `stripe_payment_intent_id` quando conferma il booking.
-  - **API utente**: `POST /api/bookings/[id]/cancellation-request` con body `{ reason }` (opzionale, max 500 char). Rate limit per IP + per utente.
-  - **API admin**: `POST /api/admin/bookings/[id]/cancel` con body `{ refund: true|false }`. Se refund=true e c'è payment_intent → `stripe.refunds.create()`. Aggiorna status=cancelled. `DELETE` stesso path → rifiuta richiesta (clear `cancellation_requested_at`).
-  - **UI utente**: componente `RequestBookingCancellation` con form motivo + invio.
-  - **UI admin**: pagina `/admin/cancellazioni` con lista richieste pending + bottoni "Annulla + rimborsa" / "Annulla senza rimborso" / "Rifiuta richiesta". Badge contatore nel link dashboard.
-- **Stato**: ✅ RISOLTO. Da testare end-to-end su staging dopo prossima prenotazione + richiesta.
-
----
-
-## 🛠️ Feature aggiunta: Template posizioni stalls satellitari
-
-Salandra ha richiesto: ogni volta che si crea un evento, le posizioni dei posteggi sulla mappa satellitare (lat/lng) vengono ereditate dall'ultimo evento alla stessa location, senza dover riposizionare manualmente.
-
-**Implementazione**:
-- **DB**: migration `17_copy_stall_positions_template`. Funzione `copy_stall_positions_from_template(p_event_id)` SECURITY DEFINER che cerca l'ultimo evento alla stessa location con stalls coordinate valorizzate, e copia per label match (A01, A02, ecc.). Non sovrascrive eventuali coordinate già impostate sul nuovo evento.
-- **POST `/api/events`**: dopo `generate_stalls`, chiama `copy_stall_positions_from_template`. Best-effort: se fallisce, l'evento è creato comunque.
-- **PATCH `/api/events/[id]`**: quando rows/cols aumentano, dopo `generate_stalls` chiama `copy_stall_positions_from_template` per i nuovi posteggi.
-
-**Effetto**: l'admin posiziona i posteggi UNA volta sulla mappa per la prima edizione; tutte le edizioni successive li trovano già piazzati.
-
----
-
-## 🆕 Bug risolti in questa sessione (26 Apr sera, Opus)
-
-### BUG-026 — Regressione "Errore nel verificare il posteggio" su staging
-- **Aperto da**: Antigravity (segnalazione Salandra 2026-04-26 14:20). Vedi [[BUG-026-regressione-prenotazione-staging]].
-- **Vera causa** (diversa dall'ipotesi iniziale): la view `stalls_with_status` su entrambi i DB **non aveva `default_price` né `event_title`**. Il codice di `book/route.js` li selezionava da sempre, ma prima del fix BUG-020 il client Supabase mascherava silenziosamente l'errore PostgREST e cadeva sul fallback `35.00`. Il fix BUG-020 ha aggiunto il check `stallErr` e ha smascherato il bug pre-esistente nella view.
-- **Fix applicato**: migration `15_view_add_event_title_default_price` su prod (`ddqwutxocznggfmrzzkw`) e staging (`yctfshlwgouhppadptgy`). La view ora include `e.title as event_title`, `e.date as event_date`, `e.price_per_stall as default_price` via `JOIN events`. Verificato runtime con `select id, label, event_id, event_title, default_price from stalls_with_status` → tutti i campi presenti.
-- **Stato**: ✅ RISOLTO
-
-### BUG-027 — `next build` fallisce su `/opengraph-image` con `Invalid URL`
-- **Aperto da**: Codex 5.3. Vedi [[BUG-027-build-fail-opengraph-image]].
-- **Causa**: bug noto di `@vercel/og` su Windows local build durante il **prerender statico** della metadata route OG image. `fileURLToPath(import.meta.url)` riceve un URL malformato.
-- **Fix applicato**: in `app/opengraph-image.js` aggiunte `export const runtime = 'nodejs'` e `export const dynamic = 'force-dynamic'` per saltare il prerender al build. L'immagine viene generata on-request (comportamento identico in produzione su Vercel, dove il prerender funzionerebbe; ma local Windows fallisce). Rimossa contestualmente la `debugLog` instrumentation top-level di Codex (regressione di BUG-014, fix incoerente).
-- **Stato**: ✅ RISOLTO
-
-### BUG-028 — `npm run lint` apre wizard interattivo
-- **Aperto da**: Codex 5.3.
-- **Causa**: nessun `.eslintrc*` nel repo → `next lint` chiede setup interattivo. Su CI/agent non funziona.
-- **Fix applicato**: creato `.eslintrc.json` con `extends: ["next/core-web-vitals"]`, ignore patterns per `vault/`, `supabase/migrations-archive/`, `.next/`.
-- **Stato**: ✅ RISOLTO
+  - Cancellation API (notifica utente quando admin annulla con/senza rimborso, motivo da `admin_cancel_reason`)
+  - Promote waitlist API (notifica utente promosso, 24h scadenza)
 
 ---
 
 ## 🟡 Tech debt (non bloccante)
 
-### TECH-DEBT-001 — `Roadmap-Master.md` allineamento periodico
-- **Status**: ✅ riallineata in sessione 2026-04-25 (Antigravity).
-- **Manutenzione**: rivedi ad ogni milestone (consegna Pro Loco, dominio personalizzato, Stripe live, ecc.).
+### TECH-DEBT-001 — Date helper UTC vs locale
+- **Cosa**: `toISOString().slice(0, 10)` usato in 9+ file per `today`. Al confine notturno (~01:00 ora italiana = 23:00 UTC) può dare il giorno "sbagliato" in confronti `event.date < today`.
+- **Volume Pro Loco** (1 timezone, eventi giornalieri): rischio basso.
+- **Fix**: helper `lib/dates.js` con `todayInRome()` quando si va multi-region.
 
-### TECH-DEBT-002 — Componenti monolitici
+### TECH-DEBT-002 — GDPR `consent_at` non valorizzato in bootstrap profilo
+- **Cosa**: il consenso (checkbox cookies/privacy) non viene salvato in `vendors.consent_at` al signup.
+- **Fix**: settare `consent_at = now()` al primo signup. Affrontare con la fase email Resend.
+
+### TECH-DEBT-003 — Componenti monolitici
 - `components/StallMapSatellite.jsx` (~20KB)
 - `components/BookingForm.jsx` (~10KB)
 - **Priorità**: bassa, post-consegna Pro Loco.
-- **Fix**: estrarre sub-componenti (`StallTooltip`, `BookingFormFields`, `BookingFormSubmit`).
+- **Fix**: estrarre `StallTooltip`, `BookingFormFields`, `BookingFormSubmit`.
 
-### TECH-DEBT-003 — Mancano test automatizzati
-- 0 test E2E (Playwright)
-- 0 unit test (Vitest)
-- **Priorità**: media. Pre-consegna almeno smoke test sui 3 flussi critici (signup, prenotazione end-to-end Stripe, admin block/unblock).
+### TECH-DEBT-004 — Mancano test automatizzati
+- 0 E2E (Playwright), 0 unit test (Vitest).
+- **Pre-consegna**: smoke test sui 3 flussi critici (signup, prenotazione end-to-end Stripe, admin block/unblock).
 
-### TECH-DEBT-004 — Rate limiting in-memory
+### TECH-DEBT-005 — Rate limiting in-memory
 - `lib/rate-limit.js` usa `Map` in memoria. Su Vercel serverless è frammentato per istanza.
-- Per il volume target (Pro Loco, ~50 prenotazioni/anno) accettabile.
-- **Migrare a Vercel KV / Upstash** se in futuro si va multi-tenant o si scala.
+- **OK** per volume Pro Loco (~50 prenotazioni/anno).
+- **Migrare** a Vercel KV / Upstash se multi-tenant.
+
+### TECH-DEBT-006 — `Roadmap-Master.md` allineamento periodico
+- Rivedi ad ogni milestone (consegna Pro Loco, dominio, Stripe live).
 
 ---
 
-## ✅ Riassunto bug risolti per categoria
+## 📊 Riassunto bug risolti per categoria (BUG-001 → BUG-046)
 
-### Sicurezza (7 bug)
-- **BUG-007** — secret leak vault (`.gitignore` profilattico)
-- **BUG-008** — middleware HTTPS solo su `/admin` (esteso a tutto il sito)
-- **BUG-013** — Vercel Auth Protection bloccava webhook Stripe (disabilitata)
-- **BUG-018** — `/prenotato/[id]` accessibile da chiunque (check ownership esplicito)
-- **BUG-021** — Password Policy solo lato client (configurata server-side su Supabase Auth, prod+staging)
-- **BUG-024** — waitlist no rate limit per-utente (aggiunto)
-- **BUG-014** — debugLog instrumentation hardcoded (gateato dietro env)
+**Sicurezza** (7): BUG-007, 008, 013, 018, 021, 024, 014.
+**Schema/DB** (5): BUG-002, 005, 006, 017, 026.
+**Stripe** (5): BUG-001, 003, 004, 012, 015.
+**API/UX** (8): BUG-009, 010, 011, 016, 020, 023, 025, 027, 028.
+**Admin/Operatività** (8): BUG-029, 030, 031, 038, 039, 041, 045, 046.
+**User flow** (7): BUG-032, 033, 034, 035, 036, 037, 042, 043, 044.
+**NOT-A-BUG**: BUG-019 (singleton supabase-admin), BUG-022 (`revalidatePath` pre-Stripe).
 
-### Schema / Database (4 bug)
-- **BUG-002** — `schema.sql` consolidato non riflette il DB reale (riscritto da `pg_dump` semantico)
-- **BUG-005** — webhook usa tabella `stripe_events_seen` mancante (creata su prod+staging)
-- **BUG-006** — bookings pending orfani (rollback + GC `pg_cron`)
-- **BUG-017** — `map_lat/map_lng` aggiornabili separatamente (validazione di coppia)
-
-### Stripe (5 bug)
-- **BUG-001** — sintassi rotta in `book/route.js` (corretta)
-- **BUG-003** — webhook usa client cookie-based, RLS blocca UPDATE (creato `lib/supabase-admin.js`)
-- **BUG-004** — env Stripe non configurate su Vercel (configurate per Preview, in attesa di onboarding live per Production)
-- **BUG-012** — SENTRY_AUTH_TOKEN mancante (configurato)
-- **BUG-015** — prezzo 0 considerato falsy (`??` + flusso eventi gratuiti)
-
-### API / UX (5 bug)
-- **BUG-009** — import a metà file (`rate-limit.js`, spostato in cima)
-- **BUG-010** — magic link punta a `localhost` su staging (SITE_URL Supabase staging configurato)
-- **BUG-011** — `supabase/.temp/` non gitignored (aggiunto)
-- **BUG-016** — DELETE/PATCH silent fail (aggiunto check rows + 404)
-- **BUG-020** — `stallData` null + fallback 35€ silenzioso (filter `event_id` + 404 esplicito)
-- **BUG-023** — `GOODS_TYPES` duplicato FE/BE (centralizzato in `lib/validate.js`)
-- **BUG-025** — copy "riceverai email" promessa non mantenuta (testo aggiornato)
-
-### Chiusi NOT-A-BUG (con razionale)
-- **BUG-019** — singleton `supabase-admin` (false positive: `persistSession: false` è sufficiente)
-- **BUG-022** — `revalidatePath` pre-Stripe (è il lock di inventario, intenzionale)
+**Totale**: 46 bug aperti, 44 chiusi (✅), 1 parcheggiato (⏳ BUG-040 Resend), 2 NOT-A-BUG.
 
 ---
 
-*Per i dettagli completi (cause, fix, evidenze, contro-verifiche) vedi [[Bug-Risolti-Storico]] in `03-Bug/_archive/`.*
+## 📝 Convenzioni per scrivere un bug report
+
+> Vedi [[Memoria-AI]] §Convenzioni Vault per il template completo.
+
+In sintesi: ogni bug nuovo va in **questo file** (sezione "Bug aperti") con:
+- **ID progressivo** (BUG-NNN)
+- **Sintomo** osservabile (cosa vede l'utente)
+- **Causa root** (post-debug)
+- **Fix** (file + righe + migration se DB)
+- **Stato**: 🔴 aperto / ⏳ parcheggiato / ✅ risolto
+
+Quando un bug è **chiuso da una settimana** o segna la fine di una sessione, lo si **sposta in `_archive/Bug-Risolti-Storico.md`** mantenendo solo una riga di summary qui (categoria + ID).

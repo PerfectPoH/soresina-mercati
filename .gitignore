@@ -71,7 +71,11 @@ supabase/.temp/
 # ---------- Cursor / Codex agent log ----------
 # Log e session di Codex 5.3 / Cursor IDE: instrumentation locale,
 # non devono finire nel repo (vedi BUG-014, BUG-027 instrumentation cleanup).
-.cursor/
+# Le rules Cursor invece sono configurazione di progetto e vanno tracciate.
+.cursor/*
+!.cursor/
+!.cursor/rules/
+!.cursor/rules/*.mdc
 
 # ---------- Obsidian vault ----------
 # Configurazione locale di Obsidian (workspace, plugin config).
@@ -80,3 +84,16 @@ supabase/.temp/
 # la sotto-cartella .obsidian no (BUG-007).
 vault/.obsidian/
 vault/Senza nome*.canvas
+
+# ---------- Graphify knowledge graph ----------
+# Generato/aggiornato con `npm run graph:update`.
+# La fonte canonica generata e' graphify-out/. Il vault resta memoria umana:
+# niente cache/HTML/JSON generati duplicati dentro vault/.
+graphify-out/
+.claude/
+vault/graph.json
+vault/graph.html
+vault/GRAPH_REPORT.md
+vault/.graphify_root
+vault/cache/
+vault/_COMMUNITY_Community*.md

@@ -1,0 +1,30 @@
+# Heavy generated folders
+node_modules/
+.next/
+out/
+build/
+dist/
+coverage/
+graphify-out/cache/
+
+# Git/editor/local tool state
+.git/
+.vercel/
+.claude/
+.cursor/debug-*.log
+vault/.obsidian/
+
+# Secrets and local credentials
+.env
+.env*.local
+CREDENZIALI.md
+credenziali.md
+*.credentials
+
+# Duplicate/generated files that do not belong inside the human vault
+vault/graph.json
+vault/graph.html
+vault/GRAPH_REPORT.md
+vault/.graphify_root
+vault/cache/
+vault/_COMMUNITY_Community*.md

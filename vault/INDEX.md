@@ -1,11 +1,11 @@
 ---
 tipo: index
-ultimo-aggiornamento: 2026-04-28
+ultimo-aggiornamento: 2026-05-04
 ---
 
 # 🗂️ INDICE — Vault Mercati Soresina
 
-> Cervello condiviso fra **Salandra** (umano), **Claude Opus 4.7** (executor), **Antigravity (Gemini)** (architect/reviewer), **Codex 5.3** (auditor read-only).
+> Cervello condiviso fra **Salandra** (umano), **Claude Opus 4.7** (executor), **Antigravity (Gemini)** (architect/reviewer), **Codex** (architect/reviewer + executor locale autorizzato).
 >
 > 📖 **Leggi sempre prima**: [[Protocollo-Collaborazione]] (vincolante) e [[Memoria-AI]] (anti-pattern).
 
@@ -17,7 +17,7 @@ ultimo-aggiornamento: 2026-04-28
 - 🧠 [[Memoria-AI]] — lezioni apprese, anti-pattern
 - 🐛 [[backlog]] — bug aperti (vista snella)
 - 🗺 [[Roadmap-Master]] — checklist completa progetto
-- 📊 [[Stato-Progetto-2026-04-26]] — snapshot stato attuale (~70% completato)
+- 📊 [[Code-Review-Codex-vs-Opus]] — audit operativo più aggiornato
 
 ---
 
@@ -54,8 +54,8 @@ ultimo-aggiornamento: 2026-04-28
 - [[backlog]] — bug aperti + tech debt (snello)
 
 ### 04-Documentazione
-- [[Code-Review-Codex-vs-Opus]] â€” audit repo + vault del 27 aprile 2026
-- [[Stato-Progetto-2026-04-26]] — snapshot più recente
+- [[Code-Review-Codex-vs-Opus]] — audit repo, vault, sicurezza e Graphify
+- [[Stato-Progetto-2026-04-26]] — snapshot archiviato in `04-Documentazione/_archive/`
 - [[README]] — note generali documentazione
 
 ---
@@ -72,6 +72,10 @@ ultimo-aggiornamento: 2026-04-28
 - `2026-04-25-antigravity-vault-cleanup.md` — Antigravity, cleanup vault
 - `2026-04-26.md` — Antigravity, devlog generale 26 aprile
 - `2026-04-26-opus-bugs-018-025.md` — Opus, fix bug 018-025
+- `2026-05-03-codex-vault-graphify-setup.md` — Codex, setup operativo vault + Graphify
+- `2026-05-03-codex-promozione-ruolo.md` — Codex promosso a peer architect/reviewer + executor controllato
+- `2026-05-04-opus-bug047-banner-profilo-redesign.md` — Opus, snapshot prezzo, banner waitlist, redesign profilo
+- `2026-05-04-codex-audit-opus-rework.md` — Codex, audit e fix BUG-048/049 sul rework Opus
 
 ### 04-Documentazione/_archive
 Documenti chiusi mantenuti come riferimento:

@@ -6,7 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "graph": "node scripts/graphify.mjs",
+    "graph:update": "node scripts/graphify.mjs update .",
+    "graph:query": "node scripts/graphify.mjs query",
+    "graph:path": "node scripts/graphify.mjs path",
+    "graph:explain": "node scripts/graphify.mjs explain",
+    "graph:check": "node scripts/check-agent-memory.mjs"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.50.0",

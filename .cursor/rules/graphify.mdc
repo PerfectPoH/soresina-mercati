@@ -1,0 +1,26 @@
+---
+description: Always load project memory and Graphify context before architecture or codebase work.
+alwaysApply: true
+---
+
+# Project Memory And Graphify
+
+Before code or architecture work in this repository:
+
+1. Read `vault/INDEX.md`.
+2. Read `vault/00-Progetto/Protocollo-Collaborazione.md`.
+3. Read `vault/00-Progetto/Memoria-AI.md`.
+4. Read `vault/03-Bug/backlog.md`.
+5. Read `graphify-out/GRAPH_REPORT.md` before broad search or architecture answers.
+
+Use the project wrapper for Graphify:
+
+```bash
+npm run graph:update
+npm run graph:query -- "question"
+npm run graph:path -- "A" "B"
+npm run graph:explain -- "node"
+npm run graph:check
+```
+
+After editing code, run `npm run graph:update` and `npm run graph:check`.

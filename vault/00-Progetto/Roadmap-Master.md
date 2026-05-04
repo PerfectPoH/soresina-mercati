@@ -1,4 +1,4 @@
-﻿---
+---
 tipo: roadmap-master
 progetto: soresina-mercati
 data: 2026-04-25
@@ -32,7 +32,8 @@ tags: [roadmap, checklist, sprint, obiettivi]
 | 9 | Fix BUG-016: DELETE/PATCH non verificano righe toccate | 1h |
 | 10 | Fix BUG-014: rimuovere debugLog() hardcoded | 30min |
 | 11 | Fix BUG-017: coordinate mappa parziali in PATCH eventi | 30min |
-| 12 | evalidatePath dopo prenotazione | 30min |
+| 12 | 
+evalidatePath dopo prenotazione | 30min |
 | 13 | UX errore concorrenza (posteggio già preso) | 2h |
 
 ### 🟡 Nice-to-have (post-consegna)
