@@ -42,16 +42,57 @@ export default function AdminBookingRow({ booking, isLast, exportMode, bookings 
     )
   }
 
-  // Modalità riga tabella
+  // Modalità riga tabella — annullamento forzato admin con motivo + scelta rimborso.
+  // BUG-045: il motivo viene salvato e mostrato all'utente nel suo profilo.
+  // BUG-040 (Resend): il backend invia automaticamente l'email "Prenotazione
+  // annullata" con motivo + indicazione rimborso emesso/no.
   async function handleCancel() {
-    if (!confirm(`Annullare la prenotazione di ${booking.vendor_name} (${booking.stalls?.label})?`)) return
+    const wasPaid = Boolean(booking.stripe_payment_intent_id)
+    const paidPrice = Number(booking.paid_price ?? booking.stalls?.price ?? booking.events?.price_per_stall ?? 0)
+
+    // 1. Motivo obbligatorio (max 500 char). Mostrato all'utente via UI + email.
+    const reason = window.prompt(
+      `Annullare la prenotazione di ${booking.vendor_name} (${booking.stalls?.label || '—'})?\n\n` +
+      `Inserisci il MOTIVO (lo vedra' l'utente):`,
+      ''
+    )
+    if (reason === null) return // user pressed cancel
+    const trimmed = reason.trim()
+    if (!trimmed) {
+      alert('Devi inserire un motivo per annullare.')
+      return
+    }
+
+    // 2. Scelta rimborso. Solo se il booking ha un payment_intent (era pagato).
+    let refund = false
+    if (wasPaid) {
+      const yesRefund = window.confirm(
+        `Vuoi anche EMETTERE IL RIMBORSO di ${paidPrice}€ a ${booking.vendor_name}?\n\n` +
+        `OK = rimborso emesso · Annulla = nessun rimborso\n\n` +
+        `Motivo: "${trimmed}"`
+      )
+      refund = yesRefund
+    } else {
+      // Booking gratuito o pending non pagato → niente da rimborsare.
+      const ok = window.confirm(
+        `Confermi annullamento (senza rimborso, prenotazione ${paidPrice === 0 ? 'gratuita' : 'non ancora pagata'})?\n\n` +
+        `Motivo: "${trimmed}"`
+      )
+      if (!ok) return
+    }
+
     setCancelling(true)
-    const res = await fetch(`/api/bookings/${booking.id}`, { method: 'DELETE' })
+    const res = await fetch(`/api/admin/bookings/${booking.id}/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: trimmed, refund }),
+    })
     if (res.ok) {
       setCancelled(true)
       router.refresh()
     } else {
-      alert('Errore nell\'annullamento. Riprova.')
+      const data = await res.json().catch(() => ({}))
+      alert(data?.message || 'Errore nell\'annullamento. Riprova.')
       setCancelling(false)
     }
   }

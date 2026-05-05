@@ -47,7 +47,7 @@ export async function POST(request, { params }) {
     const { data: b, error: loadErr } = await admin
       .from('bookings')
       .select(`
-        id, user_id, status, stall_id, event_id, paid_price,
+        id, user_id, status, stall_id, event_id, paid_price, stripe_session_id,
         events ( id, title, date, price_per_stall, active ),
         stalls ( id, label, price )
       `)
@@ -167,29 +167,74 @@ export async function POST(request, { params }) {
         { status: 500 }
       )
     }
-    let session
-    try {
-      session = await stripe.checkout.sessions.create({
-        payment_method_types: ['card'],
-        line_items: [{
-          price_data: {
-            currency: 'eur',
-            product_data: { name: `Prenotazione posteggio ${stall?.label ?? ''} - ${ev.title}` },
-            unit_amount: Math.round(amountToCharge * 100),
-          },
-          quantity: 1,
-        }],
-        mode: 'payment',
-        success_url: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/prenotato/${params.id}?success=true`,
-        cancel_url:  `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/prenotato/${params.id}?canceled=true`,
-        metadata: { booking_id: params.id, stall_id: b.stall_id || '', event_id: b.event_id || '' },
-      })
-    } catch (stripeErr) {
-      safeLogError('[booking/complete] stripe session create failed', stripeErr)
-      return NextResponse.json(
-        { error: 'stripe_failed', message: stripeErr?.message || 'Errore Stripe' },
-        { status: 502 }
-      )
+
+    // BUG-052 (Codex audit 2026-05-04): idempotency. Se il booking ha gia'
+    // una Stripe Checkout session attiva (creata in un precedente tentativo
+    // di completamento, doppio click, refresh), riusiamola invece di crearne
+    // una nuova. Cosi' due tab che chiamano /complete portano alla stessa
+    // checkout, evitando il rischio di doppio pagamento.
+    let session = null
+    if (b.stripe_session_id) {
+      try {
+        const existing = await stripe.checkout.sessions.retrieve(b.stripe_session_id)
+        if (existing.status === 'complete' || existing.payment_status === 'paid') {
+          // Pagamento gia' avvenuto: il webhook dovrebbe star confermando.
+          // Restituiamo OK senza checkout url: il client torna a /prenotato/[id]
+          // che mostrera' "Prenotazione confermata!" appena arriva il webhook.
+          return NextResponse.json({ ok: true, free: false, checkoutUrl: null, alreadyPaid: true })
+        }
+        if (existing.status === 'open' && existing.url) {
+          // Sessione ancora valida: la riusiamo.
+          session = existing
+        }
+        // status 'expired' (Stripe scade le sessioni dopo 24h) → cadiamo
+        // sul flow di creazione nuova sessione qui sotto.
+      } catch (retrieveErr) {
+        // Session non recuperabile (forse cancellata da Stripe dashboard,
+        // o id non valido): procediamo a crearne una nuova. Loghiamo per
+        // tracciare ma non blocchiamo il flow.
+        safeLogError('[booking/complete] stripe session retrieve failed (creating new)', retrieveErr)
+      }
+    }
+
+    if (!session) {
+      try {
+        session = await stripe.checkout.sessions.create({
+          payment_method_types: ['card'],
+          line_items: [{
+            price_data: {
+              currency: 'eur',
+              product_data: { name: `Prenotazione posteggio ${stall?.label ?? ''} - ${ev.title}` },
+              unit_amount: Math.round(amountToCharge * 100),
+            },
+            quantity: 1,
+          }],
+          mode: 'payment',
+          success_url: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/prenotato/${params.id}?success=true`,
+          cancel_url:  `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/prenotato/${params.id}?canceled=true`,
+          metadata: { booking_id: params.id, stall_id: b.stall_id || '', event_id: b.event_id || '' },
+        })
+      } catch (stripeErr) {
+        safeLogError('[booking/complete] stripe session create failed', stripeErr)
+        return NextResponse.json(
+          { error: 'stripe_failed', message: stripeErr?.message || 'Errore Stripe' },
+          { status: 502 }
+        )
+      }
+
+      // Salviamo subito stripe_session_id sul booking. Cosi' la prossima
+      // chiamata al /complete (doppio click, retry, altro tab) la trova e
+      // la riusa invece di creare un duplicato. Best-effort: se questa
+      // UPDATE fallisce non rolliamo back la session Stripe (l'utente puo'
+      // pagare comunque), ma logghiamo per visibilita'.
+      const { error: claimErr } = await admin
+        .from('bookings')
+        .update({ stripe_session_id: session.id })
+        .eq('id', params.id)
+        .eq('status', 'pending')
+      if (claimErr) {
+        safeLogError('[booking/complete] stripe_session_id claim failed', claimErr)
+      }
     }
 
     return NextResponse.json({ ok: true, free: false, checkoutUrl: session.url })

@@ -5,7 +5,7 @@ ultimo-aggiornamento: 2026-05-04
 
 # Backlog dei Bug
 
-> 🔴 **3 bug aperti da review Codex 2026-05-04.** Tutti riguardano coerenza del flusso booking/pending/Stripe: BUG-050, BUG-051, BUG-052.
+> 🟢 **0 bug critici aperti.** I 3 bug aperti dall'audit Codex 2026-05-04 (BUG-050 stall_status check, BUG-051 GC waitlist 24h, BUG-052 Stripe session idempotency) sono stati chiusi nella sessione 2026-05-05 (Opus). Aggiunti anche: dark mode email + UI annullamento forzato admin con motivo + scelta rimborso.
 >
 > 📚 **Storia completa** (BUG-001 → BUG-046, con cause, fix, motivazioni di chiusura) → [[Bug-Risolti-Storico]] in `_archive/`.
 
@@ -13,36 +13,48 @@ ultimo-aggiornamento: 2026-05-04
 
 ## 🔴 Bug aperti
 
-### BUG-050 — `/api/book` non verifica server-side che il posteggio sia libero
-- **Priorita**: P1.
-- **Sintomo**: una richiesta stale o costruita a mano puo' inviare `stall_id` di un posteggio `blocked`, `booked` o gia' `pending`.
-- **Causa root**: `app/api/book/route.js` legge da `stalls_with_status`, ma seleziona solo prezzo/evento/label e non seleziona ne' controlla `stall_status` prima dell'insert.
-- **Impatto**: l'utente puo' creare un booking pending su un posteggio non prenotabile. Se il posto e' gia' confirmed, puo' arrivare fino a Stripe e poi il webhook rischia di fallire/no-op; se e' blocked, puo' confermare un posto bloccato dall'admin.
-- **Fix consigliato**: selezionare `stall_status` e rifiutare ogni valore diverso da `free`. Per robustezza vera, spostare la prenotazione in una RPC/constraint DB-side atomica che controlli stato + insert nella stessa transazione.
-- **File**: `app/api/book/route.js` righe 110-164.
-- **Stato**: 🔴 aperto.
-
-### BUG-051 — GC Stripe 15 minuti cancella pending da waitlist che dovrebbero durare 24h
-- **Priorita**: P1.
-- **Sintomo**: il banner e il flusso waitlist promettono 24h per completare il pagamento, ma il cron `release_expired_pending_bookings` cancella i booking pending dopo 15 minuti.
-- **Causa root**: in `supabase/schema.sql`, `release_expired_pending_bookings()` filtra solo `status = 'pending'` e `created_at < now() - interval '15 minutes'`, senza escludere `from_waitlist = true`.
-- **Impatto**: una promozione waitlist puo' sparire dopo 15 minuti invece che dopo 24h. Il banner puo' mostrare una deadline falsa o l'utente puo' perdere il posto prima del tempo dichiarato.
-- **Fix consigliato**: distinguere esplicitamente pending Stripe e pending waitlist. Minimo: aggiungere `and coalesce(from_waitlist, false) = false` al GC 15 minuti e lasciare i waitlist pending al cron `release_expired_waitlist_promotions()`.
-- **File**: `supabase/schema.sql` righe 422-425 e migration corrispondente da aggiungere.
-- **Stato**: 🔴 aperto.
-
-### BUG-052 — `/api/bookings/[id]/complete` puo' creare checkout Stripe multiple per lo stesso booking
-- **Priorita**: P2.
-- **Sintomo**: doppio click, due tab o retry possono chiamare piu' volte l'endpoint di completamento su uno stesso booking pending.
-- **Causa root**: dopo il recheck `status = pending`, la route crea una nuova Stripe Checkout session senza marcare il booking come gia' associato a una sessione attiva e senza riusare una sessione esistente.
-- **Impatto**: possono esistere piu' sessioni pagabili per lo stesso booking. Il primo pagamento conferma, un pagamento successivo puo' essere accettato da Stripe ma ignorato dall'app perche' il webhook aggiorna solo `status = pending`.
-- **Fix consigliato**: introdurre un claim/idempotency per booking prima di creare Checkout. Opzioni: salvare `stripe_session_id` appena creata e riusarla se ancora valida; oppure usare una RPC/colonna `checkout_locked_at`/`checkout_session_id` con update atomico su `status = pending`.
-- **File**: `app/api/bookings/[id]/complete/route.js` righe 146-185.
-- **Stato**: 🔴 aperto.
+*(nessuno)*
 
 ---
 
-## 🆕 Bug risolti in questa sessione (2026-05-04, Codex audit)
+## 🆕 Bug risolti in questa sessione (2026-05-05, Opus)
+
+### BUG-050 — `/api/book` non verificava server-side che il posteggio fosse libero
+- **Priorita**: P1.
+- **Sintomo**: una richiesta stale o costruita a mano poteva inviare `stall_id` di un posteggio blocked/booked/pending.
+- **Fix**: `app/api/book/route.js` ora seleziona `stall_status` da `stalls_with_status` e ritorna 409 con messaggio dedicato per ciascuno stato (blocked / booked / pending) prima dell'INSERT.
+- **Stato**: ✅ risolto.
+
+### BUG-051 — GC Stripe 15min cancellava pending da waitlist che dovrebbero durare 24h
+- **Priorita**: P1.
+- **Sintomo**: i pending da `promote_next_waitlist` venivano cancellati dopo 15min invece che dopo 24h, contraddicendo banner ed email.
+- **Fix DB** (migration 24): `release_expired_pending_bookings()` aggiunge `and coalesce(from_waitlist, false) = false`. I waitlist pending restano gestiti dal cron orario `release_expired_waitlist_promotions()`.
+- **Migration applicata** su prod e staging.
+- **Stato**: ✅ risolto.
+
+### BUG-052 — `/api/bookings/[id]/complete` poteva creare Stripe Checkout multiple per lo stesso booking
+- **Priorita**: P2.
+- **Sintomo**: doppio click / due tab / retry creavano sessioni Stripe multiple → rischio doppio pagamento accettato da Stripe ma scartato dall'app.
+- **Fix**: la query iniziale ora seleziona anche `stripe_session_id`. Prima di creare nuova session: se ne esiste una `complete`/`paid` → ritorna `alreadyPaid:true` (webhook in corso); se `open` → riusa l'URL; se `expired`/non recuperabile → crea nuova. La nuova `stripe_session_id` viene salvata SUBITO sul booking (claim atomico via `.eq('status', 'pending')`).
+- **Stato**: ✅ risolto.
+
+### Email dark mode (richiesta Salandra)
+- **Sintomo**: contrasto basso in Apple Mail / Gmail / Outlook dark mode (gradient ambra + testi marroni invertiti automaticamente).
+- **Fix**: `lib/email-templates.js` shell ora include `<meta name="color-scheme" content="only light">` + `<meta name="supported-color-schemes" content="light">` + `<style>` con `:root { color-scheme: only light; }` e media query `@prefers-color-scheme: dark` che forza i nostri colori warm con `!important`. Aggiunte classi `.em-card .em-meta .em-link .em-cta` su tutti gli elementi colorati per il targeting selettivo.
+- **Stato**: ✅ risolto.
+
+### UI Admin "Annulla forzatamente" con scelta rimborso (richiesta Salandra)
+- **Sintomo**: il bottone "Annulla" nella tabella prenotazioni admin chiamava `DELETE /api/bookings/[id]` (endpoint utente) senza motivo, senza rimborso, senza email.
+- **Fix**: `components/AdminBookingRow.jsx` `handleCancel` ora usa `POST /api/admin/bookings/[id]/cancel` (endpoint con motivo + refund). Flow:
+  1. Prompt motivo obbligatorio (max 500 char).
+  2. Se `stripe_payment_intent_id` esiste (booking pagato): confirm "Vuoi anche EMETTERE IL RIMBORSO di X€?" → sì/no.
+  3. Se booking non pagato (gratuito o pending): confirm secco senza scelta rimborso (niente da rimborsare).
+  4. Backend invia email automaticamente via `bookingCancelledByAdminEmail` con motivo + indicazione rimborso (gia' implementato in BUG-040).
+- **Stato**: ✅ risolto.
+
+---
+
+## 🆕 Bug risolti in sessione precedente (2026-05-04, Codex audit)
 
 ### BUG-048 — `supabase/schema.sql` non includeva la nuova logica `promote_next_waitlist`
 - **Sintomo**: la migration 23 crea `bookings.paid_price` e aggiorna `promote_next_waitlist` per snapshottare il prezzo, ma il dump consolidato `supabase/schema.sql` contiene ancora la funzione vecchia.

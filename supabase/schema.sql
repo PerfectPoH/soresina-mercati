@@ -411,6 +411,9 @@ end;
 $$;
 
 -- 2.8 release_expired_pending_bookings — GC cron Stripe (vedi 14_)
+-- BUG-051 (Codex audit 2026-05-04): esclude `from_waitlist=true` perche'
+-- i pending nati da promote_next_waitlist hanno TTL di 24h gestito dal
+-- cron dedicato `release_expired_waitlist_promotions` (migration 19).
 create or replace function public.release_expired_pending_bookings()
 returns integer
 language plpgsql
@@ -422,7 +425,8 @@ begin
   update bookings
     set status = 'cancelled'
     where status = 'pending'
-      and created_at < now() - interval '15 minutes';
+      and created_at < now() - interval '15 minutes'
+      and coalesce(from_waitlist, false) = false;
   get diagnostics v_count = row_count;
   return v_count;
 end;

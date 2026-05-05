@@ -107,9 +107,15 @@ export async function POST(request) {
     // event_id, la stall verrebbe trovata e si calcolerebbe il prezzo del
     // suo evento "vero" mentre il booking verrebbe creato sull'event_id
     // sbagliato. .maybeSingle() per non esplodere su 0 row.
+    // BUG-050 (Codex audit 2026-05-04): selezioniamo anche `stall_status` per
+    // rifiutare server-side richieste su posti non liberi. Senza questo check,
+    // una richiesta stale o costruita a mano puo' creare un booking pending
+    // su uno stall blocked/booked/pending. La RLS + unique index su
+    // bookings_one_confirmed_per_stall e' rete di sicurezza ma non protegge
+    // il caso "blocked" (admin lo ha bloccato manualmente, niente confirmed).
     const { data: stallData, error: stallErr } = await supabase
       .from('stalls_with_status')
-      .select('price, default_price, event_title, label, event_id, event_date')
+      .select('price, default_price, event_title, label, event_id, event_date, stall_status')
       .eq('id', stall_id)
       .eq('event_id', event_id)
       .maybeSingle()
@@ -135,6 +141,24 @@ export async function POST(request) {
       return NextResponse.json(
         { error: 'event_past', message: 'Questo mercato si è già svolto e non è più prenotabile.' },
         { status: 400 }
+      )
+    }
+
+    // BUG-050 (Codex): verifica server-side che lo stall sia FREE. Se e'
+    // blocked/booked/pending, rifiutiamo con 409 Conflict. Messaggi distinti
+    // per dare all'utente il motivo giusto.
+    if (stallData.stall_status && stallData.stall_status !== 'free') {
+      const messages = {
+        blocked: 'Questo posteggio e\' stato bloccato dall\'organizzazione e non e\' prenotabile.',
+        booked:  'Questo posteggio e\' gia\' stato prenotato. Aggiorna la pagina e scegline un altro.',
+        pending: 'Questo posteggio e\' in attesa di pagamento da un altro utente. Riprova tra qualche minuto.',
+      }
+      return NextResponse.json(
+        {
+          error:   `stall_${stallData.stall_status}`,
+          message: messages[stallData.stall_status] || 'Posteggio non disponibile.',
+        },
+        { status: 409 }
       )
     }
 
