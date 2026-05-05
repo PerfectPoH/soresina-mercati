@@ -5,6 +5,8 @@ import { revalidatePath } from 'next/cache'
 import { enforceRateLimit } from '@/lib/rate-limit'
 import { safeLogError } from '@/lib/log'
 import { validateUuid } from '@/lib/validate'
+import { sendEmail } from '@/lib/email'
+import { bookingCancelledByAdminEmail, waitlistPromotedEmail } from '@/lib/email-templates'
 import Stripe from 'stripe'
 
 export const runtime = 'nodejs'
@@ -47,11 +49,17 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: 'forbidden', message: 'Solo admin.' }, { status: 403 })
     }
 
-    // Carica booking (admin client per avere stripe_payment_intent_id)
+    // Carica booking (admin client per avere stripe_payment_intent_id +
+    // dati per email: vendor_email/name, event title/date, stall label).
     const admin = createSupabaseAdminClient()
     const { data: booking, error: loadErr } = await admin
       .from('bookings')
-      .select('id, status, event_id, stall_id, stripe_payment_intent_id, stripe_session_id')
+      .select(`
+        id, status, event_id, stall_id, stripe_payment_intent_id, stripe_session_id,
+        vendor_name, vendor_email, paid_price,
+        events ( title, date ),
+        stalls ( label )
+      `)
       .eq('id', params.id)
       .maybeSingle()
 
@@ -120,6 +128,59 @@ export async function POST(request, { params }) {
         safeLogError('[admin/cancel] promote_next_waitlist failed', promoteErr)
       } else {
         promotedBookingId = promoted || null
+      }
+    }
+
+    // BUG-040 (Resend): email transazionali. Fail-safe: se Resend e' down,
+    // logghiamo ma non blocchiamo la cancellazione (l'utente vede comunque
+    // lo stato aggiornato sul sito).
+    if (booking.vendor_email && booking.events) {
+      const tpl = bookingCancelledByAdminEmail({
+        to:          booking.vendor_email,
+        bookingId:   booking.id,
+        eventTitle:  booking.events.title,
+        eventDate:   booking.events.date,
+        reason:      adminReason,
+        refunded:    Boolean(refundId),
+        paidPrice:   Number(booking.paid_price ?? 0),
+        vendorName:  booking.vendor_name,
+      })
+      await sendEmail({
+        to:      booking.vendor_email,
+        subject: tpl.subject,
+        html:    tpl.html,
+        text:    tpl.text,
+      })
+    }
+
+    // Email all'utente promosso da waitlist (BUG-040 + BUG-046):
+    // ha 24h per pagare/confermare.
+    if (promotedBookingId) {
+      const { data: promotedBooking } = await admin
+        .from('bookings')
+        .select(`
+          id, vendor_name, vendor_email, paid_price,
+          events ( title, date ),
+          stalls ( label )
+        `)
+        .eq('id', promotedBookingId)
+        .maybeSingle()
+      if (promotedBooking?.vendor_email && promotedBooking.events) {
+        const tpl = waitlistPromotedEmail({
+          to:         promotedBooking.vendor_email,
+          bookingId:  promotedBooking.id,
+          eventTitle: promotedBooking.events.title,
+          eventDate:  promotedBooking.events.date,
+          stallLabel: promotedBooking.stalls?.label,
+          paidPrice:  Number(promotedBooking.paid_price ?? 0),
+          vendorName: promotedBooking.vendor_name,
+        })
+        await sendEmail({
+          to:      promotedBooking.vendor_email,
+          subject: tpl.subject,
+          html:    tpl.html,
+          text:    tpl.text,
+        })
       }
     }
 

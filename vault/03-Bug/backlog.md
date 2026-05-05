@@ -118,13 +118,18 @@ ultimo-aggiornamento: 2026-05-04
 
 ## ⏳ In attesa di dipendenze esterne
 
-### BUG-040 — Email post-cancellazione/rimborso non inviate
-- **Sintomo**: quando admin annulla/approva richiesta cancellazione, l'utente non riceve email.
-- **Blocco**: dipende da Resend onboarding / dominio verificato.
-- **Hook da aggiungere quando si sblocca**:
-  - Webhook Stripe (conferma prenotazione)
-  - Cancellation API (notifica utente quando admin annulla con/senza rimborso, motivo da `admin_cancel_reason`)
-  - Promote waitlist API (notifica utente promosso, 24h scadenza)
+*(nessuno)*
+
+## ✅ Risolti recentemente (in coda di archiviazione)
+
+### BUG-040 — Email transazionali via Resend ✅
+- **Stato finale**: 3 email critiche implementate via Resend SDK + template inline JSX-to-string.
+  - Conferma prenotazione (post Stripe `checkout.session.completed`).
+  - Annullamento admin con/senza rimborso (motivo da `admin_cancel_reason`, `admin_refunded`).
+  - Promozione waitlist (24h scadenza, in entrambi i punti: cancel+promote auto e promote manuale admin).
+- **Files**: `lib/email.js` (wrapper), `lib/email-templates.js` (3 template), hook in `app/api/webhooks/stripe/route.js`, `app/api/admin/bookings/[id]/cancel/route.js`, `app/api/admin/waitlist/[id]/promote/route.js`.
+- **Pattern**: lazy init client (no crash se `RESEND_API_KEY` manca), fail-safe (l'invio non rolla back state DB), idempotency via `.select(...).maybeSingle()` dopo UPDATE.
+- **Da configurare lato Salandra**: dominio verificato Resend (DNS SPF+DKIM+DMARC) + `RESEND_FROM_EMAIL` su Vercel. Per testing immediato `onboarding@resend.dev` (limite 100/day to-own-email).
 
 ---
 

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { safeLogError } from '@/lib/log'
+import { sendEmail } from '@/lib/email'
+import { bookingConfirmedEmail } from '@/lib/email-templates'
 
 // Stripe SDK requires Node runtime (uses crypto/Buffer non disponibili in Edge).
 export const runtime = 'nodejs'
@@ -152,7 +154,9 @@ async function handleCheckoutCompleted(supabase, session) {
     ? session.payment_intent
     : session.payment_intent?.id || null
 
-  const { error } = await supabase
+  // BUG-040 (Resend): selezioniamo il booking gia' aggiornato per avere
+  // tutti i dati necessari all'email di conferma in un solo round-trip.
+  const { data: confirmed, error } = await supabase
     .from('bookings')
     .update({
       status: 'confirmed',
@@ -161,8 +165,39 @@ async function handleCheckoutCompleted(supabase, session) {
     })
     .eq('id', bookingId)
     .eq('status', 'pending')
+    .select(`
+      id, vendor_name, vendor_email, paid_price,
+      events ( title, date, location ),
+      stalls ( label )
+    `)
+    .maybeSingle()
 
   if (error) throw error
+  // Se non c'e' confirmed, vuol dire che il booking non era pending (gia'
+  // confermato da un precedente webhook). Non rinviamo l'email per non
+  // duplicare. Questo e' coerente con la deduplica su stripe_events_seen.
+  if (!confirmed) return
+
+  // Email di conferma. Fail-safe: se l'invio fallisce non rolliamo back
+  // la conferma, l'utente vede comunque /prenotato/[id] sul sito.
+  if (confirmed.vendor_email && confirmed.events) {
+    const tpl = bookingConfirmedEmail({
+      to:            confirmed.vendor_email,
+      bookingId:     confirmed.id,
+      eventTitle:    confirmed.events.title,
+      eventDate:     confirmed.events.date,
+      eventLocation: confirmed.events.location,
+      stallLabel:    confirmed.stalls?.label,
+      paidPrice:     Number(confirmed.paid_price ?? 0),
+      vendorName:    confirmed.vendor_name,
+    })
+    await sendEmail({
+      to:      confirmed.vendor_email,
+      subject: tpl.subject,
+      html:    tpl.html,
+      text:    tpl.text,
+    })
+  }
 }
 
 async function handleCheckoutExpired(supabase, session) {

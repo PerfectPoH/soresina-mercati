@@ -5,6 +5,8 @@ import { revalidatePath } from 'next/cache'
 import { enforceRateLimit } from '@/lib/rate-limit'
 import { safeLogError } from '@/lib/log'
 import { validateUuid } from '@/lib/validate'
+import { sendEmail } from '@/lib/email'
+import { waitlistPromotedEmail } from '@/lib/email-templates'
 
 // POST /api/admin/waitlist/[id]/promote
 // L'admin promuove manualmente un'iscrizione waitlist. Funziona se:
@@ -101,6 +103,36 @@ export async function POST(request, { params }) {
       revalidatePath(`/evento/${entry.event_id}`)
       revalidatePath('/profilo')
     } catch (_) {}
+
+    // BUG-040 (Resend): email "si e' liberato un posto · 24h per pagare".
+    // Best-effort: se Resend e' down, l'utente vede comunque il banner
+    // in-site (BUG-046 follow-up) quando rientra nel sito.
+    const { data: promotedBooking } = await admin
+      .from('bookings')
+      .select(`
+        id, vendor_name, vendor_email, paid_price,
+        events ( title, date ),
+        stalls ( label )
+      `)
+      .eq('id', bookingId)
+      .maybeSingle()
+    if (promotedBooking?.vendor_email && promotedBooking.events) {
+      const tpl = waitlistPromotedEmail({
+        to:         promotedBooking.vendor_email,
+        bookingId:  promotedBooking.id,
+        eventTitle: promotedBooking.events.title,
+        eventDate:  promotedBooking.events.date,
+        stallLabel: promotedBooking.stalls?.label,
+        paidPrice:  Number(promotedBooking.paid_price ?? 0),
+        vendorName: promotedBooking.vendor_name,
+      })
+      await sendEmail({
+        to:      promotedBooking.vendor_email,
+        subject: tpl.subject,
+        html:    tpl.html,
+        text:    tpl.text,
+      })
+    }
 
     return NextResponse.json({ ok: true, booking_id: bookingId, stall_id: stallId })
   } catch (err) {
