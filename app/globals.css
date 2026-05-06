@@ -182,6 +182,74 @@ html.dark textarea::placeholder {
 /* Header sticky e banner: blur/opacita' su scuro */
 html.dark header.bg-white { background-color: #1f1d1ee6 !important; }
 
+/* ================================================================
+   Estensioni 2026-05-05: superfici, badge e gradient introdotti dal
+   redesign incrementale (Sessione 1-5 Plan-Redesign-Incrementale).
+   Senza queste regole, alcuni componenti restavano "bianco su bianco"
+   o "ambra elettrico" su sfondo scuro = contrasto insufficiente.
+   ================================================================ */
+
+/* Divisori griglia (KPI strip admin, info grid evento, account info) */
+html.dark .bg-stone-200 { background-color: #3a3734 !important; }
+
+/* Badge stato (profile cards, pill stato evento, banner ambra) */
+html.dark .bg-amber-100 { background-color: #3a2a12 !important; }
+html.dark .bg-amber-200 { background-color: #4a3617 !important; }
+html.dark .bg-green-100 { background-color: #1d3a26 !important; }
+html.dark .bg-green-200 { background-color: #25502f !important; }
+html.dark .bg-sage-100  { background-color: #1f3528 !important; }
+
+/* Background con opacity (gradient + tints leggeri usati in cards) */
+html.dark .bg-amber-50\/60  { background-color: rgba(42, 34, 18, 0.6) !important; }
+html.dark .bg-amber-50\/80  { background-color: rgba(42, 34, 18, 0.85) !important; }
+html.dark .bg-red-50\/60    { background-color: rgba(42, 18, 18, 0.6) !important; }
+html.dark .bg-stone-50\/60  { background-color: rgba(31, 29, 27, 0.6) !important; }
+
+/* Bordi con opacity (card prenotazione, tile colorati) */
+html.dark .border-amber-200\/70    { border-color: rgba(106, 78, 26, 0.7) !important; }
+html.dark .border-amber-200\/80    { border-color: rgba(106, 78, 26, 0.85) !important; }
+html.dark .border-amber-300\/70    { border-color: rgba(120, 90, 30, 0.7) !important; }
+html.dark .border-green-200\/70    { border-color: rgba(31, 74, 46, 0.7) !important; }
+html.dark .border-red-200\/60      { border-color: rgba(90, 38, 38, 0.7) !important; }
+
+/* Gradient di card (ProfileBookingCard, hero conferma /prenotato).
+   Le regole `bg-gradient-to-br from-white to-...` di Tailwind non sono
+   facilmente target-abili tramite single-class override perche' il gradient
+   risulta da combinazione di custom property + util. Usiamo override
+   selettivi sull'intera shorthand `background-image` quando le combo
+   tipiche dei nostri componenti compaiono. */
+html.dark .bg-gradient-to-br.from-white.to-green-50\/40 {
+  background-image: linear-gradient(to bottom right, #262422, rgba(29, 58, 38, 0.4)) !important;
+}
+html.dark .bg-gradient-to-br.from-amber-50\/60.to-white {
+  background-image: linear-gradient(to bottom right, rgba(42, 34, 18, 0.6), #262422) !important;
+}
+/* Hero conferma /prenotato/[id] */
+html.dark .bg-green-50\/60  { background-color: rgba(18, 34, 25, 0.6) !important; }
+
+/* Indicator dot ring sfondi colorati attenuati */
+html.dark .bg-amber-200\/60  { background-color: rgba(74, 54, 23, 0.6) !important; }
+html.dark .bg-green-200\/50  { background-color: rgba(37, 80, 47, 0.5) !important; }
+html.dark .bg-stone-200\/60  { background-color: rgba(58, 55, 52, 0.6) !important; }
+
+/* Shadow ambra dei pending booking (era shadow-amber-100 light): in dark
+   un alone giallo elettrico stride con lo sfondo. Disattiviamo gli shadow
+   colorati ambra/cream in dark. */
+html.dark .shadow-amber-100\/40 { --tw-shadow-color: transparent !important; box-shadow: none !important; }
+html.dark .shadow-warm,
+html.dark .shadow-warm-xl,
+html.dark .shadow-warm-lg { --tw-shadow-color: rgba(0,0,0,0.3) !important; }
+
+/* Pill di stato (verde/ambra/rosso) su dark devono restare leggibili.
+   Le combinazioni standard di tailwind (bg-amber-100 + text-amber-dark)
+   ora sono mappate; testiamo. */
+html.dark .bg-amber-light { background-color: #3a2a12 !important; }
+html.dark .text-amber-dark { color: #FAC775 !important; }
+html.dark .text-amber-brand { color: #E89A33 !important; }
+
+/* Bottoni outline su dark: testo grigio chiaro su sfondo scuro */
+html.dark .border-stone-200.text-stone-700 { color: #d6d3cf !important; }
+
 /* Print: forza sempre il tema chiaro per risparmiare toner */
 @media print {
   html.dark body { background: white !important; color: black !important; }

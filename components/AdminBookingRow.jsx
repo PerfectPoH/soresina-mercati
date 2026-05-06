@@ -100,8 +100,6 @@ export default function AdminBookingRow({ booking, isLast, exportMode, bookings 
   if (cancelled) return null
 
   // BUG-038: prenotazioni di eventi passati sono in sola lettura.
-  // Annullarle non avrebbe senso (l'evento si è già svolto) e potrebbe
-  // distorcere lo storico/statistiche.
   const todayIso  = new Date().toISOString().slice(0, 10)
   const isPastEv  = booking.events?.date && booking.events.date < todayIso
 

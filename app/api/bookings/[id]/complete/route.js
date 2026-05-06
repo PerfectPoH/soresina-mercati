@@ -19,13 +19,7 @@ const stripe = process.env.STRIPE_SECRET_KEY
 // completa la prenotazione:
 //   - Se l'evento e' gratuito (amount = 0) -> conferma immediata via admin client.
 //   - Se l'evento ha un prezzo > 0 -> genera nuova Stripe checkout session
-//     e ritorna l'URL al client per redirect.
-//
-// Server-side check obbligatori:
-//   - booking e' del chiamante (o admin)
-//   - status = 'pending'
-//   - evento esiste, attivo, non passato
-//   - posto/event coerenti
+//     (o riusa quella esistente, BUG-052) e ritorna l'URL al client.
 export async function POST(request, { params }) {
   try {
     const limited = enforceRateLimit(request, { prefix: 'booking-complete', limit: 30, windowMs: 60_000 })
@@ -40,10 +34,8 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: 'not_authenticated', message: 'Devi accedere.' }, { status: 401 })
     }
 
-    // Carica booking + dati evento/posto. Usiamo l'admin client (service
-    // role) per garantire che il check ownership avvenga sempre, anche se
-    // RLS dovesse essere temporaneamente fuori sync.
     const admin = createSupabaseAdminClient()
+    // BUG-052: includiamo stripe_session_id per riusare la session esistente.
     const { data: b, error: loadErr } = await admin
       .from('bookings')
       .select(`
@@ -62,7 +54,6 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: 'not_found', message: 'Prenotazione non trovata.' }, { status: 404 })
     }
 
-    // Ownership check (admin puo' completare per chiunque, utility di rescue)
     if (b.user_id !== user.id) {
       const { data: vendor } = await supabase
         .from('vendors').select('role').eq('user_id', user.id).maybeSingle()
@@ -73,7 +64,7 @@ export async function POST(request, { params }) {
 
     if (b.status !== 'pending') {
       return NextResponse.json(
-        { error: 'wrong_status', message: `Questa prenotazione e' gia' in stato "${b.status}", non puo' essere completata.` },
+        { error: 'wrong_status', message: `Questa prenotazione e' gia' in stato "${b.status}".` },
         { status: 400 }
       )
     }
@@ -94,9 +85,8 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: 'invalid_price', message: 'Prezzo prenotazione non valido.' }, { status: 500 })
     }
 
-    // BUG-047: snapshot prezzo. Se paid_price esiste gia' (es. booking da
-    // waitlist promosso dalla funzione DB), non va riscritto: e' il prezzo
-    // promesso all'utente quando il pending e' nato.
+    // BUG-047: snapshot prezzo. Se paid_price esiste gia' (booking promosso
+    // da waitlist), non riscriverlo: e' il prezzo congelato all'utente.
 
     // Caso evento gratuito: conferma immediata, niente Stripe.
     if (amountToCharge === 0) {
@@ -125,8 +115,7 @@ export async function POST(request, { params }) {
       return NextResponse.json({ ok: true, free: true, checkoutUrl: null })
     }
 
-    // Per booking vecchi senza snapshot, congeliamo il prezzo una sola volta
-    // prima di creare la sessione Stripe.
+    // Snapshot paid_price se non c'e' ancora; recheck pending altrimenti.
     if (b.paid_price == null) {
       const { data: snapshotted, error: snapshotErr } = await admin
         .from('bookings')
@@ -160,7 +149,7 @@ export async function POST(request, { params }) {
       }
     }
 
-    // Caso a pagamento: crea nuova Stripe checkout session
+    // Caso a pagamento: crea o riusa Stripe checkout session
     if (!stripe) {
       return NextResponse.json(
         { error: 'stripe_not_configured', message: 'Stripe non configurato.' },
@@ -168,31 +157,22 @@ export async function POST(request, { params }) {
       )
     }
 
-    // BUG-052 (Codex audit 2026-05-04): idempotency. Se il booking ha gia'
-    // una Stripe Checkout session attiva (creata in un precedente tentativo
-    // di completamento, doppio click, refresh), riusiamola invece di crearne
-    // una nuova. Cosi' due tab che chiamano /complete portano alla stessa
-    // checkout, evitando il rischio di doppio pagamento.
+    // BUG-052 (Codex): idempotency. Se il booking ha gia' una session attiva
+    // (precedente tentativo, doppio click, retry), riusiamola invece di crearne
+    // una nuova. Cosi' due tab portano alla stessa checkout, evitando il
+    // rischio di doppio pagamento.
     let session = null
     if (b.stripe_session_id) {
       try {
         const existing = await stripe.checkout.sessions.retrieve(b.stripe_session_id)
         if (existing.status === 'complete' || existing.payment_status === 'paid') {
           // Pagamento gia' avvenuto: il webhook dovrebbe star confermando.
-          // Restituiamo OK senza checkout url: il client torna a /prenotato/[id]
-          // che mostrera' "Prenotazione confermata!" appena arriva il webhook.
           return NextResponse.json({ ok: true, free: false, checkoutUrl: null, alreadyPaid: true })
         }
         if (existing.status === 'open' && existing.url) {
-          // Sessione ancora valida: la riusiamo.
           session = existing
         }
-        // status 'expired' (Stripe scade le sessioni dopo 24h) → cadiamo
-        // sul flow di creazione nuova sessione qui sotto.
       } catch (retrieveErr) {
-        // Session non recuperabile (forse cancellata da Stripe dashboard,
-        // o id non valido): procediamo a crearne una nuova. Loghiamo per
-        // tracciare ma non blocchiamo il flow.
         safeLogError('[booking/complete] stripe session retrieve failed (creating new)', retrieveErr)
       }
     }
@@ -222,11 +202,7 @@ export async function POST(request, { params }) {
         )
       }
 
-      // Salviamo subito stripe_session_id sul booking. Cosi' la prossima
-      // chiamata al /complete (doppio click, retry, altro tab) la trova e
-      // la riusa invece di creare un duplicato. Best-effort: se questa
-      // UPDATE fallisce non rolliamo back la session Stripe (l'utente puo'
-      // pagare comunque), ma logghiamo per visibilita'.
+      // Salviamo subito stripe_session_id sul booking (claim atomico).
       const { error: claimErr } = await admin
         .from('bookings')
         .update({ stripe_session_id: session.id })

@@ -9,12 +9,7 @@ import { sendEmail } from '@/lib/email'
 import { waitlistPromotedEmail } from '@/lib/email-templates'
 
 // POST /api/admin/waitlist/[id]/promote
-// L'admin promuove manualmente un'iscrizione waitlist. Funziona se:
-// - l'iscrizione ha stall_id specifico → crea booking pending su quel posto
-// - l'iscrizione e' generale (stall_id NULL) → cerchiamo un posto free
-//   nell'evento e ci creiamo il pending. Se nessun posto e' libero → 400.
-// Il booking creato ha 24h per essere pagato (gestito da
-// release_expired_waitlist_promotions cron).
+// L'admin promuove manualmente un'iscrizione waitlist.
 export async function POST(request, { params }) {
   try {
     const limited = enforceRateLimit(request, { prefix: 'admin-waitlist-promote', limit: 30, windowMs: 60_000 })
@@ -34,7 +29,6 @@ export async function POST(request, { params }) {
 
     const admin = createSupabaseAdminClient()
 
-    // Carica l'entry waitlist + i dati dell'evento per il check.
     const { data: entry, error: loadErr } = await admin
       .from('waitlist')
       .select('id, event_id, stall_id, user_id, vendor_name, events ( date, active )')
@@ -48,18 +42,17 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: 'not_found', message: 'Iscrizione non trovata.' }, { status: 404 })
     }
 
-    // BUG-042: difesa in profondita' contro promote su eventi passati
-    // (la funzione DB rifiuta gia', ma diamo un errore chiaro alla UI).
+    // BUG-042: difesa in profondita' contro promote su eventi passati.
     const todayIso = new Date().toISOString().slice(0, 10)
     const ev       = entry.events
     if (!ev || !ev.active || (ev.date && ev.date < todayIso)) {
       return NextResponse.json(
-        { error: 'event_past_or_archived', message: 'Non puoi promuovere su un evento passato o archiviato. Rimuovi l\'iscrizione invece.' },
+        { error: 'event_past_or_archived', message: 'Non puoi promuovere su un evento passato o archiviato.' },
         { status: 400 }
       )
     }
 
-    // Decidi lo stall: se entry.stall_id e' valorizzato, usalo. Se non lo è,
+    // Decidi lo stall: se entry.stall_id e' valorizzato usalo, altrimenti
     // trova il primo stall free per quell'evento.
     let stallId = entry.stall_id
     if (!stallId) {
@@ -73,15 +66,13 @@ export async function POST(request, { params }) {
         .maybeSingle()
       if (!freeStall) {
         return NextResponse.json(
-          { error: 'no_free_stall', message: 'Nessun posto libero in questo evento. Libera prima un posteggio.' },
+          { error: 'no_free_stall', message: 'Nessun posto libero in questo evento.' },
           { status: 400 }
         )
       }
       stallId = freeStall.id
     }
 
-    // Chiama la funzione DB che fa tutto il lavoro (insert booking pending +
-    // delete waitlist entry + gestione errori limite/conflict).
     const { data: bookingId, error: rpcErr } = await admin.rpc('promote_next_waitlist', {
       p_event_id: entry.event_id,
       p_stall_id: stallId,
@@ -92,7 +83,7 @@ export async function POST(request, { params }) {
     }
     if (!bookingId) {
       return NextResponse.json(
-        { error: 'no_eligible', message: 'Nessuna iscrizione eleggibile (forse l\'utente è al limite o il posto è occupato).' },
+        { error: 'no_eligible', message: 'Nessuna iscrizione eleggibile.' },
         { status: 400 }
       )
     }
@@ -104,7 +95,7 @@ export async function POST(request, { params }) {
       revalidatePath('/profilo')
     } catch (_) {}
 
-    // BUG-040 (Resend): email "si e' liberato un posto · 24h per pagare".
+    // BUG-040 (Resend): email "si e' liberato un posto - 24h per pagare".
     // Best-effort: se Resend e' down, l'utente vede comunque il banner
     // in-site (BUG-046 follow-up) quando rientra nel sito.
     const { data: promotedBooking } = await admin
