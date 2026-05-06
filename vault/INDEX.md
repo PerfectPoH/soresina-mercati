@@ -1,6 +1,6 @@
 ---
 tipo: index
-ultimo-aggiornamento: 2026-05-04
+ultimo-aggiornamento: 2026-05-06
 ---
 
 # 🗂️ INDICE — Vault Mercati Soresina
@@ -108,11 +108,23 @@ Documenti chiusi mantenuti come riferimento:
 
 **Branch attivi**:
 - `main` (HEAD `5989389`) — produzione live, vecchio flusso senza Stripe (sano)
-- `staging` (HEAD `395c766`) — Stripe sandbox attivo end-to-end, validato
+- `staging` — Stripe sandbox + Resend in testing mode + redesign incrementale completato (Sessioni 1-5 [[Plan-Redesign-Incrementale]]) + 5 bug critici post-Codex chiusi (BUG-047 … BUG-052)
 
-**Bloccanti per consegna Pro Loco** (non bloccanti per testing):
+**Implementato dal 04-06 maggio**:
+- ✅ BUG-047 snapshot prezzo (`bookings.paid_price`)
+- ✅ BUG-048/049 schema.sql allineato + complete/route.js snapshot-aware
+- ✅ BUG-050 stall_status check server-side prima INSERT
+- ✅ BUG-051 GC 15min esclude pending da waitlist (migration 24)
+- ✅ BUG-052 atomic claim Stripe session via `stripe_session_id` token
+- ✅ BUG-040 Resend con 3 template (conferma, annullamento admin, promozione waitlist)
+- ✅ Banner waitlist promotion in-site (countdown 24h)
+- ✅ Redesign incrementale: /profilo, homepage, /evento/[id], /admin, /prenotato/[id]
+- ✅ Email dark mode opt-out
+- ✅ UI admin "annulla forzato" con motivo + scelta rimborso
+
+**Bloccanti residui per consegna Pro Loco**:
 1. Onboarding Stripe live (KYC + IBAN Pro Loco) — Salandra
-2. Email transazionali Resend — Opus (in piano)
-3. Dominio personalizzato — Salandra
+2. Verifica dominio Resend (DNS SPF+DKIM+DMARC) per email a destinatari diversi dal proprio account — Salandra
+3. Dominio personalizzato sito — Salandra
 
 Quando i 3 sono fatti → merge `staging → main`.

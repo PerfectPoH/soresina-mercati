@@ -63,16 +63,18 @@ Aggiungi le variabili d'ambiente nel pannello Vercel → Settings → Environmen
 - [x] **Sentry** error tracking + Vercel Analytics (cookie-less, GDPR-friendly)
 - [x] **Staging environment** completo (branch + Supabase project + Vercel preview env)
 
+- [x] **Email transazionali** (Resend) — conferma prenotazione, annullamento admin con motivo+rimborso, promozione waitlist 24h. Testing mode con `onboarding@resend.dev` finché non si configura un dominio verificato.
+
 ## Roadmap aperta
 
-- [ ] **Email transazionali** (Resend) — conferma prenotazione, notifica admin, promozione waitlist
-- [ ] **Dominio personalizzato** (es. mercati-soresina.it)
-- [ ] **Notifica admin** per ogni pagamento ricevuto
+- [ ] **Dominio personalizzato** (es. mercati-soresina.it) + verifica dominio Resend per email a destinatari diversi dal proprio account.
+- [ ] **Notifica admin** per ogni pagamento ricevuto (email separata).
+- [ ] **Test E2E Playwright** sui 3 flussi critici (signup, prenotazione end-to-end Stripe, admin block/cancel).
 
 ## Bootstrap database (nuovo project Supabase)
 
 1. Esegui `supabase/schema.sql` nell'SQL Editor (stato consolidato: tabelle, view, funzioni, RLS, realtime)
-2. Esegui in ordine i file in `supabase/migrations/` (numerati 13 → 21)
+2. Esegui in ordine i file in `supabase/migrations/` (numerati 13 → 24)
 3. `supabase/migrations-archive/` contiene lo storico 02-09 già assorbito in `schema.sql` — riferimento, non rieseguire
 4. Configura le env Vercel come da `.env.example`
 5. Imposta Supabase Auth → Email provider: min length 10, lowercase + uppercase + digits + symbols

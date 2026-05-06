@@ -2,28 +2,28 @@
 tipo: roadmap-master
 progetto: soresina-mercati
 data: 2026-04-25
-ultimo-aggiornamento: 2026-04-25T23:25
+ultimo-aggiornamento: 2026-05-06
 tags: [roadmap, checklist, sprint, obiettivi]
 ---
 
 # 🗺️ Master Roadmap & Checklist (Pro Loco)
 
-> **Ultimo riallineamento**: 25 aprile 2026 (Antigravity). I task [x] sono verificati nel codice e nei devlog di Opus.
+> **Ultimo riallineamento**: 6 maggio 2026 (Opus). I task [x] sono verificati nel codice e nei devlog di Opus/Codex.
 
 ---
 
 ## 🎯 Prossimi Obiettivi — Sprint Pro Loco
 
 ### 🔴 Bloccanti per la consegna
-| # | Obiettivo | Chi | Effort |
-|---|-----------|-----|--------|
-| 1 | **Onboarding Stripe live** (KYC + IBAN + P.IVA Pro Loco) | Salandra | 1-2h |
-| 2 | **Live keys Stripe** → Vercel Production | Opus | 15min |
-| 3 | **Merge staging → main** | Opus | 10min |
-| 4 | **Email conferma prenotazione** al venditore (Resend) | Opus | 4-6h |
-| 5 | **Email notifica admin** per ogni pagamento | Opus | 2h |
-| 6 | **Checkbox consenso GDPR** nel form prenotazione | Opus | 1h |
-| 7 | **Dominio personalizzato** (mercati-soresina.it) | Salandra | 30min |
+| # | Obiettivo | Chi | Stato |
+|---|-----------|-----|-------|
+| 1 | **Onboarding Stripe live** (KYC + IBAN + P.IVA Pro Loco) | Salandra | aperto |
+| 2 | **Live keys Stripe** → Vercel Production | Opus | dopo #1 |
+| 3 | **Merge staging → main** | Opus | dopo #1+#2 |
+| 4 | ✅ **Email conferma prenotazione** al venditore (Resend) | Opus | chiuso 5 mag (BUG-040, 3 template) |
+| 5 | **Email notifica admin** per ogni pagamento | Opus | aperto, ~2h |
+| 6 | ✅ **Checkbox consenso GDPR** nel form prenotazione | Opus | chiuso |
+| 7 | **Dominio personalizzato sito + verifica dominio Resend** | Salandra | aperto |
 
 ### 🟠 Alta priorità (post-merge)
 | # | Obiettivo | Effort |

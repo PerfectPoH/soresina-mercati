@@ -35,8 +35,10 @@ ultimo-aggiornamento: 2026-05-04
 ### BUG-052 — `/api/bookings/[id]/complete` poteva creare Stripe Checkout multiple per lo stesso booking
 - **Priorita**: P2.
 - **Sintomo**: doppio click / due tab / retry creavano sessioni Stripe multiple → rischio doppio pagamento accettato da Stripe ma scartato dall'app.
-- **Fix**: la query iniziale ora seleziona anche `stripe_session_id`. Prima di creare nuova session: se ne esiste una `complete`/`paid` → ritorna `alreadyPaid:true` (webhook in corso); se `open` → riusa l'URL; se `expired`/non recuperabile → crea nuova. La nuova `stripe_session_id` viene salvata SUBITO sul booking (claim atomico via `.eq('status', 'pending')`).
-- **Stato**: ✅ risolto.
+- **Fix v1** (5 mag): SELECT include `stripe_session_id`. Riuso session esistente (`complete`/`paid` → alreadyPaid; `open` → riusa URL; altri → crea nuova). Save di `stripe_session_id` post-create.
+- **Codex audit 6 mag**: il fix v1 NON era atomico — due chiamate concorrenti potevano leggere entrambe `null`, creare 2 session, e una sovrascriveva l'altra.
+- **Fix v2** (6 mag): claim atomico tramite stessa colonna `stripe_session_id` come token di lock. Step: (1) se esiste session id reale, retrieve+riuso; (2) UPDATE `stripe_session_id = 'claim:<token>'` con `.is('stripe_session_id', null)` — solo il primo worker vince; (3) i worker che perdono leggono il booking e: se trovano `claim:*` ritornano 409 `in_progress`, se trovano session reale la riusano; (4) il claimer chiama Stripe; (5) sostituisce token con session id reale via UPDATE filtrato su `claimToken`. Rilascio claim in caso di errore Stripe.
+- **Stato**: ✅ risolto v2.
 
 ### Email dark mode (richiesta Salandra)
 - **Sintomo**: contrasto basso in Apple Mail / Gmail / Outlook dark mode (gradient ambra + testi marroni invertiti automaticamente).
