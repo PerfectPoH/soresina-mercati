@@ -1,4 +1,5 @@
 # Mercati Soresina — Pro Loco
+per testare: https://soresina-mercati-git-staging-barakatabed687-8047s-projects.vercel.app/evento/51d7d363-3941-4413-8ded-8ddbf6367a23
 
 App per la gestione dei posteggi dei mercati di Soresina.
 
